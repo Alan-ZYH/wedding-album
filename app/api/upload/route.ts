@@ -6,6 +6,8 @@ import { validateFile, sanitizeName, MAX_FILES } from '@/lib/sanitize'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { getSettings } from '@/lib/settings'
 import { isAdminAuthenticated } from '@/lib/auth'
+
+export const dynamic = 'force-dynamic'
 import { isGuestAuthenticated } from '@/lib/guest-auth'
 import { Media } from '@/types'
 

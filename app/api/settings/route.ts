@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSettings, updateSettings } from '@/lib/settings'
 import { isAdminAuthenticated } from '@/lib/auth'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const settings = await getSettings()

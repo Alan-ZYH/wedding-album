@@ -3,6 +3,8 @@ import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { Media } from '@/types'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)

@@ -7,6 +7,8 @@ import { sanitizeText, sanitizeName } from '@/lib/sanitize'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { Message } from '@/types'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   try {
     const isAdmin = await isAdminAuthenticated(req)

@@ -4,6 +4,8 @@ import { isAdminAuthenticated } from '@/lib/auth'
 import { sanitizeText } from '@/lib/sanitize'
 import { Message } from '@/types'
 
+export const dynamic = 'force-dynamic'
+
 type RouteParams = { params: Promise<{ id: string }> }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
