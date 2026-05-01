@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --champagne: #c9a84c;
+  --cream: #fdf8f0;
+  --dark-bg: #0f0f0f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Wedding gold border utility */
+@layer utilities {
+  .border-gold {
+    border-color: var(--champagne);
+  }
+  .text-gold {
+    color: var(--champagne);
+  }
+  .bg-gold {
+    background-color: var(--champagne);
+  }
+}
+
+/* Upload progress bar */
+.upload-progress {
+  transition: width 0.3s ease;
+}
+
+/* Danmaku container */
+.danmaku-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.danmaku-item {
+  position: absolute;
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+
+/* scroll: right → left */
+@keyframes danmaku-scroll {
+  from { transform: translateX(100vw); }
+  to   { transform: translateX(calc(-100vw - 100%)); }
+}
+.danmaku-scroll {
+  animation: danmaku-scroll var(--duration) linear forwards;
+}
+
+/* scroll-reverse: left → right */
+@keyframes danmaku-scroll-reverse {
+  from { transform: translateX(calc(-100vw - 100%)); }
+  to   { transform: translateX(100vw); }
+}
+.danmaku-scroll-reverse {
+  animation: danmaku-scroll-reverse var(--duration) linear forwards;
+}
+
+/* float: rise upward and fade */
+@keyframes danmaku-float {
+  0%   { opacity: 0; transform: translateY(0); }
+  15%  { opacity: 1; transform: translateY(-10px); }
+  80%  { opacity: 1; transform: translateY(-60px); }
+  100% { opacity: 0; transform: translateY(-80px); }
+}
+.danmaku-float {
+  animation: danmaku-float var(--duration) ease-out forwards;
+}
+
+/* fade: appear in place and disappear */
+@keyframes danmaku-fade {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.danmaku-fade {
+  animation: danmaku-fade var(--duration) ease-in-out forwards;
+}
+
+/* Slide transitions */
+@keyframes slideInLeft {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes fadeInSlide {
+  from { opacity: 0; transform: scale(1.03); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(1.12); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.transition-fade     { animation: fadeInSlide 0.8s ease-in-out; }
+.transition-slide    { animation: slideInLeft 0.6s ease-out; }
+.transition-zoom     { animation: zoomIn 0.8s ease-out; }
+.transition-none     { animation: none; }
+
+/* Scrollbar hide for display page */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
