@@ -254,10 +254,17 @@ function MediaPageContent() {
                   <p className="text-white/90 text-sm leading-relaxed">{preview.transcript}</p>
                 )}
                 {preview.transcriptStatus === 'done' && !preview.transcript && (
-                  <p className="text-white/30 text-xs italic">（無法偵測到語音）</p>
+                  <p className="text-white/30 text-xs italic">
+                    {preview.transcriptNote || '（無法偵測到語音）'}
+                  </p>
                 )}
                 {preview.transcriptStatus === 'error' && (
-                  <p className="text-orange-400 text-xs">⚠️ 辨識失敗，請確認 OPENAI_API_KEY 設定</p>
+                  <div>
+                    <p className="text-orange-400 text-xs">⚠️ 辨識失敗，請確認 OPENAI_API_KEY 設定</p>
+                    {preview.transcriptNote && (
+                      <p className="text-white/30 text-xs mt-1 font-mono break-all">{preview.transcriptNote}</p>
+                    )}
+                  </div>
                 )}
                 {!preview.transcriptStatus && (
                   <p className="text-white/30 text-xs italic">尚未辨識</p>
