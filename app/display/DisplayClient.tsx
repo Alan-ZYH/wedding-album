@@ -248,10 +248,16 @@ function Slide({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const errorReported = useRef(false)
+  // Increment each time this slide becomes active to re-trigger CSS animation
+  const [enterKey, setEnterKey] = useState(0)
 
   useEffect(() => {
     errorReported.current = false
   }, [item.id])
+
+  useEffect(() => {
+    if (active) setEnterKey((k) => k + 1)
+  }, [active])
 
   // ── Effect 1: start / stop video when active changes ──
   useEffect(() => {
@@ -290,9 +296,10 @@ function Slide({
     return () => clearTimeout(timer)
   }, [active, item.id, item.fileType, settings.playVideos, onVideoEnd])
 
-  const containerClass = `absolute inset-0 transition-opacity duration-500 ${
-    active ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
-  }`
+  // Outer: controls z-order and visibility of the preloading slot
+  const outerClass = `absolute inset-0 ${active ? 'z-10' : 'z-0 pointer-events-none opacity-0'}`
+  // Inner: re-keyed on each activation to replay the CSS keyframe animation
+  const animClass = active ? `transition-${transition}` : ''
 
   const handleVideoError = () => {
     if (errorReported.current) return
@@ -313,47 +320,51 @@ function Slide({
 
   if (item.fileType === 'video' && settings.playVideos) {
     return (
-      <div className={`${containerClass} flex items-center justify-center bg-black`}>
-        <video
-          ref={videoRef}
-          src={`/api/video/${item.googleDriveFileId}`}
-          playsInline
-          preload="auto"
-          onEnded={onVideoEnd}
-          onError={handleVideoError}
-          className="w-full h-full object-contain"
-        />
-        {/* Auto-generated subtitle overlay */}
-        {active && item.transcript && (
-          <div className="absolute bottom-16 left-8 right-8 flex justify-center z-20 pointer-events-none">
-            <span
-              className="text-white text-center leading-relaxed px-5 py-2.5 rounded-xl"
-              style={{
-                fontSize: 'clamp(18px, 2.5vw, 32px)',
-                background: 'rgba(0,0,0,0.65)',
-                textShadow: '0 1px 4px rgba(0,0,0,0.9)',
-                backdropFilter: 'blur(4px)',
-              }}
-            >
-              {item.transcript}
-            </span>
-          </div>
-        )}
-        {settings.showGuestName && active && <GuestNameBadge name={item.guestName} />}
+      <div className={outerClass}>
+        <div key={enterKey} className={`absolute inset-0 flex items-center justify-center bg-black ${animClass}`}>
+          <video
+            ref={videoRef}
+            src={`/api/video/${item.googleDriveFileId}`}
+            playsInline
+            preload="auto"
+            onEnded={onVideoEnd}
+            onError={handleVideoError}
+            className="w-full h-full object-contain"
+          />
+          {/* Auto-generated subtitle overlay */}
+          {active && item.transcript && (
+            <div className="absolute bottom-16 left-8 right-8 flex justify-center z-20 pointer-events-none">
+              <span
+                className="text-white text-center leading-relaxed px-5 py-2.5 rounded-xl"
+                style={{
+                  fontSize: 'clamp(18px, 2.5vw, 32px)',
+                  background: 'rgba(0,0,0,0.65)',
+                  textShadow: '0 1px 4px rgba(0,0,0,0.9)',
+                  backdropFilter: 'blur(4px)',
+                }}
+              >
+                {item.transcript}
+              </span>
+            </div>
+          )}
+          {settings.showGuestName && active && <GuestNameBadge name={item.guestName} />}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className={`${containerClass} flex items-center justify-center bg-black`}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`https://lh3.googleusercontent.com/d/${item.googleDriveFileId}=w1920`}
-        alt={item.fileName}
-        className={`max-w-full max-h-full object-contain transition-${transition}`}
-        onError={handlePhotoError}
-      />
-      {settings.showGuestName && active && <GuestNameBadge name={item.guestName} />}
+    <div className={outerClass}>
+      <div key={enterKey} className={`absolute inset-0 flex items-center justify-center bg-black ${animClass}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`https://lh3.googleusercontent.com/d/${item.googleDriveFileId}=w1920`}
+          alt={item.fileName}
+          className="max-w-full max-h-full object-contain"
+          onError={handlePhotoError}
+        />
+        {settings.showGuestName && active && <GuestNameBadge name={item.guestName} />}
+      </div>
     </div>
   )
 }

@@ -91,12 +91,12 @@ body {
   animation: danmaku-fade var(--duration) ease-in-out forwards;
 }
 
-/* Slide transitions */
+/* Slide transitions — applied to the inner animated wrapper in DisplayClient */
 @keyframes slideInLeft {
-  from { transform: translateX(100%); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
 }
-@keyframes fadeInSlide {
+@keyframes fadeInScale {
   from { opacity: 0; transform: scale(1.03); }
   to   { opacity: 1; transform: scale(1); }
 }
@@ -105,10 +105,11 @@ body {
   to   { opacity: 1; transform: scale(1); }
 }
 
-.transition-fade     { animation: fadeInSlide 0.8s ease-in-out; }
-.transition-slide    { animation: slideInLeft 0.6s ease-out; }
-.transition-zoom     { animation: zoomIn 0.8s ease-out; }
-.transition-none     { animation: none; }
+/* animation-fill-mode:forwards keeps the final state after the animation ends */
+.transition-fade  { animation: fadeInScale 0.7s ease-out forwards; }
+.transition-slide { animation: slideInLeft 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+.transition-zoom  { animation: zoomIn      0.6s ease-out forwards; }
+.transition-none  { /* instant — no animation */ }
 
 /* Scrollbar hide for display page */
 .scrollbar-hide::-webkit-scrollbar {
