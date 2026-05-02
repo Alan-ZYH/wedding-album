@@ -36,12 +36,13 @@ body {
   transition: width 0.3s ease;
 }
 
-/* Danmaku container */
+/* Danmaku container — z-20 keeps it above slides (z-10/z-0) but below controls (z-30) */
 .danmaku-container {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  z-index: 20;
 }
 
 .danmaku-item {
