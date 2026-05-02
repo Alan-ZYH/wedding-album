@@ -96,45 +96,89 @@ export default function UploadForm({ guestId, guestName }: Props) {
     setErrors([])
     setDone(false)
 
-    const formData = new FormData()
-    formData.append('guestId', guestId)
-    formData.append('guestName', guestName)
-    files.forEach((f) => formData.append('files', f.file))
+    const errs: string[] = []
+    let succeeded = 0
 
-    try {
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setProgress((p) => Math.min(p + 5, 90))
-      }, 500)
+    for (let i = 0; i < files.length; i++) {
+      const { file, type } = files[i]
+      const fileType = type === 'image' ? 'photo' : 'video'
 
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      })
+      try {
+        // ── Step 1: Ask server to create a Google Drive resumable session ──
+        const initRes = await fetch('/api/upload/init', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            guestId,
+            guestNameRaw: guestName,
+            mimeType: file.type,
+            fileSize: file.size,
+            originalName: file.name,
+          }),
+        })
+        const initData = await initRes.json()
+        if (!initData.success) {
+          errs.push(initData.error || `${file.name}：初始化失敗`)
+          continue
+        }
+        const { uploadUrl, mediaId, fileName } = initData
 
-      clearInterval(progressInterval)
-      setProgress(100)
+        // ── Step 2: Upload directly to Google Drive (bypasses Vercel) ──
+        const driveRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type },
+          body: file,
+        })
+        if (!driveRes.ok) {
+          const txt = await driveRes.text().catch(() => '')
+          errs.push(`${file.name}：上傳失敗 (${driveRes.status}) ${txt}`.trim())
+          continue
+        }
+        const driveData = await driveRes.json().catch(() => null)
+        const googleDriveFileId: string = driveData?.id
+        if (!googleDriveFileId) {
+          errs.push(`${file.name}：無法取得 Drive 檔案 ID`)
+          continue
+        }
 
-      const data = await res.json()
+        // ── Step 3: Server sets file public + saves metadata to Firestore ──
+        const completeRes = await fetch('/api/upload/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mediaId,
+            googleDriveFileId,
+            guestId,
+            guestName,
+            fileName,
+            mimeType: file.type,
+            fileSize: file.size,
+            fileType,
+          }),
+        })
+        const completeData = await completeRes.json()
+        if (!completeData.success) {
+          errs.push(completeData.error || `${file.name}：儲存失敗`)
+          continue
+        }
 
-      if (data.results) {
-        const succeeded = data.results.filter((r: { success: boolean }) => r.success).length
-        const failed = data.results
-          .filter((r: { success: boolean; error?: string }) => !r.success)
-          .map((r: { error?: string }) => r.error || '上傳失敗')
-        setSuccessCount(succeeded)
-        if (failed.length) setErrors(failed)
+        succeeded++
+      } catch (err) {
+        console.error('Upload error', err)
+        errs.push(`${file.name}：網路錯誤，請重試`)
       }
 
-      if (data.success || (data.results && data.results.some((r: { success: boolean }) => r.success))) {
-        setDone(true)
-        setFiles([])
-      }
-    } catch {
-      setErrors(['網路錯誤，請重試'])
-    } finally {
-      setUploading(false)
+      // Update progress bar per-file
+      setProgress(Math.round(((i + 1) / files.length) * 100))
     }
+
+    setSuccessCount(succeeded)
+    if (errs.length) setErrors(errs)
+    if (succeeded > 0) {
+      setDone(true)
+      setFiles([])
+    }
+    setUploading(false)
   }
 
   if (done && successCount > 0) {

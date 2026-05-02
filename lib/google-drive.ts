@@ -127,6 +127,72 @@ export async function uploadFileToDrive(
   }
 }
 
+// Create a resumable upload session on Google Drive.
+// Returns the session upload URL (valid ~1 week).
+// The client then PUTs the file bytes directly to this URL — bypassing Vercel's 4.5 MB limit.
+export async function createResumableUploadSession(
+  fileName: string,
+  mimeType: string,
+  fileSize: number,
+  isVideo: boolean
+): Promise<string> {
+  const auth = getAuth()
+  // getAccessToken() returns the raw bearer token string
+  const token = await auth.getAccessToken()
+  if (!token) throw new Error('Failed to obtain Google access token')
+
+  const folders = await ensureFolders()
+  const folderId = isVideo ? folders.videos : folders.photos
+
+  const res = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id%2CwebViewLink&supportsAllDrives=true',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': mimeType,
+        'X-Upload-Content-Length': String(fileSize),
+      },
+      body: JSON.stringify({ name: fileName, parents: [folderId] }),
+    }
+  )
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Drive resumable session failed: ${res.status} ${text}`)
+  }
+
+  const uploadUrl = res.headers.get('location') || res.headers.get('Location')
+  if (!uploadUrl) throw new Error('Drive returned no Location header for resumable upload')
+  return uploadUrl
+}
+
+// After the client has uploaded a file directly to Google Drive,
+// call this to make it publicly readable and return its webViewLink.
+export async function setDriveFilePublic(
+  fileId: string
+): Promise<{ webViewLink: string }> {
+  const drive = getDriveClient()
+
+  await drive.permissions.create({
+    fileId,
+    requestBody: { role: 'reader', type: 'anyone' },
+    supportsAllDrives: true,
+  })
+
+  const info = await drive.files.get({
+    fileId,
+    fields: 'id,webViewLink',
+    supportsAllDrives: true,
+  })
+
+  return {
+    webViewLink:
+      info.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`,
+  }
+}
+
 export async function deleteFileFromDrive(fileId: string): Promise<void> {
   const drive = getDriveClient()
   await drive.files.delete({
