@@ -45,8 +45,8 @@ function checkVideoDuration(file: File): Promise<string | null> {
     video.preload = 'metadata'
     video.onloadedmetadata = () => {
       URL.revokeObjectURL(url)
-      // Use Math.round so a video encoded as 8.03 s (displayed as "8 秒") is still allowed
-      if (Math.round(video.duration) > MAX_VIDEO_DURATION) {
+      // Allow up to 8.9 s to cover iOS encoding overhead on 8-second clips
+      if (video.duration > 8.9) {
         resolve(`${file.name}：影片超過 ${MAX_VIDEO_DURATION} 秒（目前 ${Math.round(video.duration)} 秒）`)
       } else {
         resolve(null)
