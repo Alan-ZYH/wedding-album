@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import { Media } from '@/types'
 
 interface Props {
@@ -13,34 +15,43 @@ export default function MyUploads({ guestId }: Props) {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [preview, setPreview] = useState<Media | null>(null)
 
-  const fetchMedia = async () => {
-    try {
-      const res = await fetch(`/api/media?guestId=${guestId}`)
-      const data = await res.json()
-      if (data.success) {
-        setMedia(data.data.filter((m: Media) => m.status === 'active'))
-      }
-    } catch {}
-    finally {
-      setLoading(false)
-    }
-  }
-
+  // Real-time listener — updates immediately after upload or hide
   useEffect(() => {
-    fetchMedia()
+    if (!db) return
+    // Query by guestId only (single-field equality — no composite index needed)
+    const q = query(
+      collection(db, 'media'),
+      where('guestId', '==', guestId)
+    )
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const all = snap.docs.map((d) => d.data() as Media)
+        // Filter active, sort newest first — client-side to avoid composite index
+        const active = all
+          .filter((m) => m.status === 'active')
+          .sort((a, b) => b.uploadTime.localeCompare(a.uploadTime))
+        setMedia(active)
+        setLoading(false)
+      },
+      () => { setLoading(false) }
+    )
+    return () => unsub()
   }, [guestId])
 
   const handleDelete = async (id: string) => {
-    if (!confirm('確定要刪除這個檔案嗎？')) return
+    if (!confirm('確定要移除這個檔案嗎？\n（檔案仍會保留在雲端，主辦人可查看）')) return
     setDeleting(id)
     try {
+      // Use 'hidden' instead of 'deleted' — file stays in Google Drive & admin can see it
       const res = await fetch(`/api/media/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId, status: 'deleted' }),
+        body: JSON.stringify({ guestId, status: 'hidden' }),
       })
-      if ((await res.json()).success) {
-        setMedia((prev) => prev.filter((m) => m.id !== id))
+      // onSnapshot will automatically remove it from the list once status changes
+      if (!(await res.json()).success) {
+        alert('移除失敗，請稍後再試')
       }
     } catch {}
     finally {
@@ -88,7 +99,6 @@ export default function MyUploads({ guestId }: Props) {
                 className="w-full h-full object-cover cursor-pointer"
                 onClick={() => setPreview(item)}
                 onError={(e) => {
-                  // Fallback to direct URL if thumbnail fails
                   const img = e.target as HTMLImageElement
                   if (!img.src.includes('uc?export')) {
                     img.src = `https://drive.google.com/uc?export=view&id=${item.googleDriveFileId}`

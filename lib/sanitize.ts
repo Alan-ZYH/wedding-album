@@ -25,8 +25,8 @@ export function sanitizeName(input: string): string {
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime']
-const MAX_IMAGE_SIZE = 20 * 1024 * 1024
-const MAX_VIDEO_SIZE = 300 * 1024 * 1024
+const MAX_IMAGE_SIZE = 50 * 1024 * 1024   // 50 MB
+const MAX_VIDEO_SIZE = 500 * 1024 * 1024  // 500 MB (duration capped client-side)
 const MAX_FILES = 20
 
 export interface FileValidation {

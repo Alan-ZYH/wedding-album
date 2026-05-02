@@ -15,6 +15,7 @@ export interface Media {
   uploadTime: string // ISO string
   status: MediaStatus
   approved: boolean
+  displayError?: boolean  // true when display client reports a playback/load failure
 }
 
 export interface Message {
@@ -32,6 +33,7 @@ export type SlideTransition = 'fade' | 'slide' | 'zoom' | 'none'
 export type DanmakuStyle = 'scroll' | 'scroll-reverse' | 'float' | 'fade'
 
 export interface Settings {
+  albumName: string         // event/album title shown on guest page
   slideInterval: number     // seconds per slide
   danmakuSpeed: number      // 1-5 scale
   danmakuDensity: number    // 1-5 scale
@@ -47,6 +49,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  albumName: '婚禮紀念相簿',
   slideInterval: 5,
   danmakuSpeed: 3,
   danmakuDensity: 3,

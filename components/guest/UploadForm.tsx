@@ -16,17 +16,18 @@ interface FileWithPreview {
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime']
-const MAX_IMAGE_SIZE = 20 * 1024 * 1024
-const MAX_VIDEO_SIZE = 300 * 1024 * 1024
+const MAX_IMAGE_SIZE = 50 * 1024 * 1024   // 50 MB
+const MAX_VIDEO_SIZE = 500 * 1024 * 1024  // 500 MB (duration enforced separately)
+const MAX_VIDEO_DURATION = 8              // seconds
 const MAX_FILES = 20
 
 function validateFile(file: File): string | null {
   if (ALLOWED_IMAGE_TYPES.includes(file.type)) {
-    if (file.size > MAX_IMAGE_SIZE) return `${file.name}：圖片超過 20MB`
+    if (file.size > MAX_IMAGE_SIZE) return `${file.name}：圖片超過 50MB`
     return null
   }
   if (ALLOWED_VIDEO_TYPES.includes(file.type)) {
-    if (file.size > MAX_VIDEO_SIZE) return `${file.name}：影片超過 300MB`
+    if (file.size > MAX_VIDEO_SIZE) return `${file.name}：影片超過 500MB`
     return null
   }
   // HEIC by extension
@@ -34,6 +35,25 @@ function validateFile(file: File): string | null {
     return null
   }
   return `${file.name}：不支援的格式`
+}
+
+// Returns a promise that resolves to an error string, or null if OK
+function checkVideoDuration(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url)
+      if (video.duration > MAX_VIDEO_DURATION) {
+        resolve(`${file.name}：影片超過 ${MAX_VIDEO_DURATION} 秒（目前 ${Math.round(video.duration)} 秒）`)
+      } else {
+        resolve(null)
+      }
+    }
+    video.onerror = () => { URL.revokeObjectURL(url); resolve(null) } // allow if can't read
+    video.src = url
+  })
 }
 
 export default function UploadForm({ guestId, guestName }: Props) {
@@ -47,7 +67,7 @@ export default function UploadForm({ guestId, guestName }: Props) {
   const dragRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
 
-  const addFiles = useCallback((newFiles: File[]) => {
+  const addFiles = useCallback(async (newFiles: File[]) => {
     const combined = [...files]
     const errs: string[] = []
 
@@ -57,12 +77,19 @@ export default function UploadForm({ guestId, guestName }: Props) {
         break
       }
       const err = validateFile(f)
-      if (err) {
-        errs.push(err)
-        continue
-      }
+      if (err) { errs.push(err); continue }
+
       const isImage = ALLOWED_IMAGE_TYPES.includes(f.type) ||
-                      f.name.toLowerCase().match(/\.(jpg|jpeg|png|webp|heic|heif)$/)
+                      !!f.name.toLowerCase().match(/\.(jpg|jpeg|png|webp|heic|heif)$/)
+      const isVideo = ALLOWED_VIDEO_TYPES.includes(f.type) ||
+                      !!f.name.toLowerCase().match(/\.(mp4|mov)$/)
+
+      // Check video duration (client-side, async)
+      if (isVideo) {
+        const durationErr = await checkVideoDuration(f)
+        if (durationErr) { errs.push(durationErr); continue }
+      }
+
       const preview = isImage ? URL.createObjectURL(f) : ''
       combined.push({ file: f, preview, type: isImage ? 'image' : 'video' })
     }
@@ -71,15 +98,15 @@ export default function UploadForm({ guestId, guestName }: Props) {
     if (errs.length) setErrors(errs)
   }, [files])
 
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) addFiles(Array.from(e.target.files))
+  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) await addFiles(Array.from(e.target.files))
     e.target.value = '' // allow re-selecting same file
   }
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     setDragging(false)
-    if (e.dataTransfer.files) addFiles(Array.from(e.dataTransfer.files))
+    if (e.dataTransfer.files) await addFiles(Array.from(e.dataTransfer.files))
   }
 
   const removeFile = (index: number) => {
@@ -216,7 +243,7 @@ export default function UploadForm({ guestId, guestName }: Props) {
           JPG、PNG、WEBP、HEIC、MP4、MOV
         </p>
         <p className="text-xs text-gray-400">
-          圖片 ≤ 20MB ｜ 影片 ≤ 300MB ｜ 最多 {MAX_FILES} 個
+          圖片 ≤ 50MB ｜ 影片 ≤ {MAX_VIDEO_DURATION} 秒 ｜ 最多 {MAX_FILES} 個
         </p>
         <input
           ref={fileInputRef}

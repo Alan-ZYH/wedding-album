@@ -52,17 +52,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: validation.error }, { status: 400 })
     }
 
-    // Build a safe filename: YYYYMMDD_HHMMSS_guestName_guestId_random.ext
+    // Build a safe filename: guestName_YYYYMMDD_HHMMSS_random.ext
     const now = new Date()
-    const dateStr = now
-      .toISOString()
-      .replace(/[-:T]/g, '')
-      .slice(0, 15)
-      .replace(/(\d{8})(\d{6})/, '$1_$2')
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const dateOnly = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
+    const timeOnly = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
     const ext = (originalName as string | undefined)?.split('.').pop()?.toLowerCase() || 'bin'
-    const random = uuidv4().slice(0, 8)
-    const safeName = guestName.replace(/[^a-zA-Z0-9一-鿿]/g, '_').slice(0, 20)
-    const fileName = `${dateStr}_${safeName}_${(guestId as string).slice(0, 8)}_${random}.${ext}`
+    const random = uuidv4().slice(0, 6)
+    const safeName = guestName.replace(/[^a-zA-Z0-9一-鿿]/g, '').slice(0, 20)
+    const fileName = `${safeName}_${dateOnly}_${timeOnly}_${random}.${ext}`
 
     const isVideo = validation.fileType === 'video'
     const uploadUrl = await createResumableUploadSession(fileName, mimeType, fileSize, isVideo)

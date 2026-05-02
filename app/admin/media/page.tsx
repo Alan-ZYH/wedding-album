@@ -244,7 +244,7 @@ function MediaPageContent() {
             </div>
 
             {/* Action buttons inside modal */}
-            <div className="flex justify-center gap-3 mt-4">
+            <div className="flex flex-wrap justify-center gap-3 mt-4">
               <button
                 onClick={() => {
                   updateMedia(preview.id, { approved: !preview.approved })
@@ -268,6 +268,17 @@ function MediaPageContent() {
               >
                 {preview.status === 'hidden' ? '👁 顯示' : '🙈 隱藏'}
               </button>
+              {preview.displayError && (
+                <button
+                  onClick={() => {
+                    updateMedia(preview.id, { displayError: false })
+                    setPreview((p) => p ? { ...p, displayError: false } : null)
+                  }}
+                  className="px-4 py-2 rounded-xl text-sm font-medium bg-orange-600 hover:bg-orange-500 text-white transition-colors"
+                >
+                  🔄 清除錯誤
+                </button>
+              )}
               <button
                 onClick={() => {
                   deleteMedia(preview.id)
@@ -348,6 +359,9 @@ function MediaCard({
             <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">已通過</span>
           ) : (
             <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">待審核</span>
+          )}
+          {item.displayError && (
+            <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">🚨 投放異常</span>
           )}
         </div>
 

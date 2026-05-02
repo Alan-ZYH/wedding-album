@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import { DEFAULT_SETTINGS } from '@/types'
 import GuestLogin from '@/components/guest/GuestLogin'
 import UploadForm from '@/components/guest/UploadForm'
 import MyUploads from '@/components/guest/MyUploads'
@@ -18,6 +21,7 @@ export default function GuestPage() {
   const [guest, setGuest] = useState<GuestInfo | null>(null)
   const [activeTab, setActiveTab] = useState<'upload' | 'message' | 'myUploads'>('upload')
   const [mounted, setMounted] = useState(false)
+  const [albumName, setAlbumName] = useState(DEFAULT_SETTINGS.albumName)
 
   useEffect(() => {
     setMounted(true)
@@ -29,6 +33,22 @@ export default function GuestPage() {
         localStorage.removeItem(GUEST_KEY)
       }
     }
+  }, [])
+
+  // Real-time settings sync — album name updates instantly when admin changes it
+  useEffect(() => {
+    if (!db) return
+    const unsub = onSnapshot(
+      doc(db, 'settings', 'config'),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data()
+          if (data?.albumName) setAlbumName(data.albumName)
+        }
+      },
+      () => {} // ignore errors, keep default
+    )
+    return () => unsub()
   }, [])
 
   const handleLogin = (name: string) => {
@@ -55,7 +75,7 @@ export default function GuestPage() {
       <header className="bg-white border-b border-[#e8d5a3] sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-serif text-[#7a5c2e] leading-tight">婚禮紀念相簿</h1>
+            <h1 className="text-lg font-serif text-[#7a5c2e] leading-tight">{albumName}</h1>
             <p className="text-xs text-[#c9a84c]">歡迎，{guest.guestName}</p>
           </div>
           <button

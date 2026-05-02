@@ -63,6 +63,23 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-4">
+        {/* Album name */}
+        <Section title="相簿設定" icon="📛">
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700">活動名稱</p>
+              <p className="text-xs text-gray-400 mt-0.5">顯示在賓客端頁面頂端</p>
+            </div>
+            <input
+              type="text"
+              value={settings.albumName ?? '婚禮紀念相簿'}
+              onChange={(e) => update('albumName', e.target.value)}
+              className="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#c9a84c] w-56"
+              placeholder="婚禮紀念相簿"
+            />
+          </div>
+        </Section>
+
         {/* Slideshow section */}
         <Section title="幻燈片設定" icon="🎞️">
           <SliderField

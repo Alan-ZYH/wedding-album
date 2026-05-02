@@ -24,18 +24,27 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const media = doc.data() as Media
 
     if (!isAdmin) {
-      const guestId = body.guestId
+      const { guestId, status, displayError } = body
+
+      // Allow display client to report a playback error (no auth needed)
+      if (displayError === true && !guestId && !status) {
+        await docRef.update({ displayError: true })
+        return NextResponse.json({ success: true })
+      }
+
+      // Guest can only update their own media status (hidden or deleted)
       if (!guestId || media.guestId !== guestId) {
         return NextResponse.json({ success: false, error: '無權限' }, { status: 403 })
       }
-      if (body.status !== 'deleted') {
+      const allowedStatuses: string[] = ['hidden', 'deleted']
+      if (!status || !allowedStatuses.includes(status)) {
         return NextResponse.json({ success: false, error: '無權限執行此操作' }, { status: 403 })
       }
-      await docRef.update({ status: 'deleted' })
+      await docRef.update({ status })
       return NextResponse.json({ success: true })
     }
 
-    const allowedFields = ['status', 'approved']
+    const allowedFields = ['status', 'approved', 'displayError']
     const updates: Record<string, unknown> = {}
     for (const field of allowedFields) {
       if (field in body) updates[field] = body[field]
