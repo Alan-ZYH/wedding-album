@@ -105,6 +105,14 @@ function MediaPageContent() {
     }
   }
 
+  const retryTranscript = async (id: string) => {
+    setProcessing(id)
+    try {
+      await fetch(`/api/media/${id}/transcribe`, { method: 'POST' })
+    } catch {}
+    finally { setProcessing(null) }
+  }
+
   if (loading) return <div className="text-center py-16 text-gray-400">載入中...</div>
 
   return (
@@ -259,11 +267,17 @@ function MediaPageContent() {
                   </p>
                 )}
                 {preview.transcriptStatus === 'error' && (
-                  <div>
-                    <p className="text-orange-400 text-xs">⚠️ 辨識失敗，請確認 OPENAI_API_KEY 設定</p>
+                  <div className="space-y-1">
+                    <p className="text-orange-400 text-xs">⚠️ 辨識失敗</p>
                     {preview.transcriptNote && (
-                      <p className="text-white/30 text-xs mt-1 font-mono break-all">{preview.transcriptNote}</p>
+                      <p className="text-white/30 text-xs font-mono break-all">{preview.transcriptNote}</p>
                     )}
+                    <button
+                      onClick={() => retryTranscript(preview.id)}
+                      className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-lg mt-1 transition-colors"
+                    >
+                      🔄 重試字幕
+                    </button>
                   </div>
                 )}
                 {!preview.transcriptStatus && (

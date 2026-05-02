@@ -186,6 +186,12 @@ export default function UploadForm({ guestId, guestName }: Props) {
           continue
         }
 
+        // For videos: kick off Whisper transcription in the background.
+        // Fire-and-forget — we don't wait for it; the guest sees "字幕生成中" via onSnapshot.
+        if (fileType === 'video') {
+          fetch(`/api/media/${mediaId}/transcribe`, { method: 'POST' }).catch(() => {})
+        }
+
         succeeded++
       } catch (err) {
         console.error('Upload error', err)

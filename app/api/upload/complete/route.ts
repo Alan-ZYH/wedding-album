@@ -1,10 +1,9 @@
-import { NextRequest, NextResponse, after } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { findFileByName, setDriveFilePublic, buildThumbnailUrl } from '@/lib/google-drive'
 import { getSettings } from '@/lib/settings'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { isGuestAuthenticated } from '@/lib/guest-auth'
-import { transcribeVideo } from '@/lib/transcribe'
 import { Media } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -87,15 +86,10 @@ export async function POST(req: NextRequest) {
 
     await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).set(media)
 
-    // Trigger Whisper transcription after the response is sent — non-blocking.
-    // `after()` keeps the function alive (up to maxDuration:60s) so Whisper has
-    // time to finish even after the HTTP response is sent to the guest.
-    if (fileType === 'video') {
-      const capturedFileId = googleDriveFileId! // narrowed from null check above
-      after(async () => {
-        await transcribeVideo(mediaId, capturedFileId, fileName, mimeType)
-      })
-    }
+    // Transcription is triggered separately by the guest's browser via
+    // POST /api/media/[id]/transcribe (fire-and-forget after this response).
+    // This gives transcription its own fresh execution budget instead of sharing
+    // the complete route's already-consumed time.
 
     return NextResponse.json({ success: true, mediaId })
   } catch (err) {

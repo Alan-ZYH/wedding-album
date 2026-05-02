@@ -1,22 +1,19 @@
 /**
  * lib/transcribe.ts
  *
- * Downloads a video from Google Drive and sends it to OpenAI Whisper for
- * speech-to-text transcription. The result is stored back in Firestore.
- *
- * Called asynchronously (via next/server `after()`) so it does NOT block
- * the upload-complete response to the guest.
+ * Streams a video from Google Drive directly to OpenAI Whisper — no full
+ * download to memory. Drive → Whisper pipeline reduces latency significantly,
+ * making it feasible even within Vercel Hobby's 10-second function limit.
  */
 
 import OpenAI, { toFile } from 'openai'
-import { downloadDriveFile } from './google-drive'
+import { getDriveFileSize, getDriveFileStream } from './google-drive'
 import { adminDb, COLLECTIONS } from './firebase-admin'
 
 // Whisper supported formats: mp3, mp4, mpeg, mpga, m4a, wav, webm
-// MOV (.mov / video/quicktime) is NOT listed — remap to mp4 (same container family)
+// .mov (video/quicktime) is NOT listed — remap to mp4 (same QuickTime container)
 function toWhisperExt(ext: string): string {
   if (ext === 'mov') return 'mp4'
-  if (ext === 'mpeg') return 'mpeg'
   const supported = ['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm']
   return supported.includes(ext) ? ext : 'mp4'
 }
@@ -26,8 +23,7 @@ function toWhisperMime(mime: string): string {
   return mime || 'video/mp4'
 }
 
-// Whisper API hard limit
-const WHISPER_MAX_BYTES = 24 * 1024 * 1024 // 24 MB (leave 1 MB margin under 25 MB)
+const WHISPER_MAX_BYTES = 24 * 1024 * 1024 // 24 MB (Whisper hard limit is 25 MB)
 
 export async function transcribeVideo(
   mediaId: string,
@@ -37,61 +33,65 @@ export async function transcribeVideo(
 ): Promise<void> {
   if (!process.env.OPENAI_API_KEY) {
     console.warn('[transcribe] OPENAI_API_KEY not set — skipping')
+    await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).update({
+      transcriptStatus: 'error',
+      transcriptNote: 'OPENAI_API_KEY 未設定',
+    }).catch(() => {})
     return
   }
 
   try {
     console.log(`[transcribe] start — mediaId=${mediaId} fileId=${fileId}`)
 
-    // 1. Download the video file from Google Drive
-    const buffer = await downloadDriveFile(fileId)
-    console.log(`[transcribe] downloaded ${buffer.byteLength} bytes`)
+    // 1. Check file size via metadata (fast, no download)
+    const fileSize = await getDriveFileSize(fileId)
+    console.log(`[transcribe] file size: ${fileSize} bytes`)
 
-    // 2. Guard: skip files that exceed Whisper's 25 MB limit
-    if (buffer.byteLength > WHISPER_MAX_BYTES) {
-      console.warn(`[transcribe] file too large (${buffer.byteLength} bytes) — skipping`)
+    if (fileSize > WHISPER_MAX_BYTES) {
+      console.warn(`[transcribe] file too large (${fileSize} bytes) — skipping Whisper`)
       await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).update({
         transcript: '',
-        transcriptStatus: 'done', // treat as done with empty transcript
+        transcriptStatus: 'done',
         transcriptNote: '影片檔案過大（超過 24 MB），無法自動生成字幕',
       })
       return
     }
 
-    // 3. Send to OpenAI Whisper
-    //    MOV files must be renamed to .mp4 — Whisper rejects .mov extension
+    // 2. Stream Drive file directly to Whisper (no buffering — faster, lower memory)
     const rawExt = fileName.split('.').pop()?.toLowerCase() || 'mp4'
     const whisperExt = toWhisperExt(rawExt)
     const whisperMime = toWhisperMime(mimeType)
+    console.log(`[transcribe] ext .${rawExt}→.${whisperExt}, mime ${mimeType}→${whisperMime}`)
 
-    console.log(`[transcribe] ext: .${rawExt} → .${whisperExt}, mime: ${mimeType} → ${whisperMime}`)
-
+    const stream = await getDriveFileStream(fileId)
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-    const blob = new Blob([new Uint8Array(buffer)], { type: whisperMime })
 
     const result = await openai.audio.transcriptions.create({
-      file: await toFile(blob, `audio.${whisperExt}`),
+      // toFile accepts a Node.js Readable (AsyncIterable) — no need to buffer first
+      file: await toFile(
+        stream as unknown as AsyncIterable<Uint8Array>,
+        `audio.${whisperExt}`,
+        { type: whisperMime }
+      ),
       model: 'whisper-1',
-      language: 'zh', // Traditional/Simplified Chinese — Whisper handles both
+      language: 'zh',
     })
 
     const transcript = result.text?.trim() ?? ''
-    console.log(`[transcribe] result: "${transcript}"`)
+    console.log(`[transcribe] done: "${transcript}"`)
 
-    // 4. Save transcript + mark done (onSnapshot propagates to display/admin instantly)
+    // 3. Write result to Firestore (onSnapshot propagates instantly)
     await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).update({
-      transcript: transcript || '',
+      transcript,
       transcriptStatus: 'done',
+      transcriptNote: '',
     })
   } catch (err) {
-    // Non-fatal — a transcription failure must never break the upload
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[transcribe] error:', msg)
-    try {
-      await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).update({
-        transcriptStatus: 'error',
-        transcriptNote: msg.slice(0, 200), // store short error for debugging
-      })
-    } catch {}
+    await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).update({
+      transcriptStatus: 'error',
+      transcriptNote: msg.slice(0, 300),
+    }).catch(() => {})
   }
 }
