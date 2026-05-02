@@ -208,6 +208,23 @@ export async function findFileByName(fileName: string): Promise<string | null> {
   return res.data.files?.[0]?.id ?? null
 }
 
+// Download a Drive file and return its content as a Buffer.
+// Used by the transcription pipeline to send the video to Whisper.
+export async function downloadDriveFile(fileId: string): Promise<Buffer> {
+  const drive = getDriveClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const res = await (drive.files.get as any)(
+    { fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'stream' }
+  )
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    res.data.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)))
+    res.data.on('end', () => resolve(Buffer.concat(chunks)))
+    res.data.on('error', reject)
+  })
+}
+
 export async function deleteFileFromDrive(fileId: string): Promise<void> {
   const drive = getDriveClient()
   await drive.files.delete({

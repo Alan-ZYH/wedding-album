@@ -299,6 +299,22 @@ function Slide({
           onError={handleVideoError}
           className="w-full h-full object-contain"
         />
+        {/* Auto-generated subtitle overlay */}
+        {active && item.transcript && (
+          <div className="absolute bottom-16 left-8 right-8 flex justify-center z-20 pointer-events-none">
+            <span
+              className="text-white text-center leading-relaxed px-5 py-2.5 rounded-xl"
+              style={{
+                fontSize: 'clamp(18px, 2.5vw, 32px)',
+                background: 'rgba(0,0,0,0.65)',
+                textShadow: '0 1px 4px rgba(0,0,0,0.9)',
+                backdropFilter: 'blur(4px)',
+              }}
+            >
+              {item.transcript}
+            </span>
+          </div>
+        )}
         {settings.showGuestName && active && <GuestNameBadge name={item.guestName} />}
       </div>
     )

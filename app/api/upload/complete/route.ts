@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { findFileByName, setDriveFilePublic, buildThumbnailUrl } from '@/lib/google-drive'
 import { getSettings } from '@/lib/settings'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { isGuestAuthenticated } from '@/lib/guest-auth'
+import { transcribeVideo } from '@/lib/transcribe'
 import { Media } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -81,6 +82,15 @@ export async function POST(req: NextRequest) {
     }
 
     await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).set(media)
+
+    // Trigger Whisper transcription after the response is sent — non-blocking.
+    // `after()` keeps the serverless function alive until the callback completes
+    // without making the guest wait for the transcription result.
+    if (fileType === 'video') {
+      after(async () => {
+        await transcribeVideo(mediaId, googleDriveFileId, fileName, mimeType)
+      })
+    }
 
     return NextResponse.json({ success: true, mediaId })
   } catch (err) {

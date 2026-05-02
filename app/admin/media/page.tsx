@@ -243,6 +243,18 @@ function MediaPageContent() {
               </a>
             </div>
 
+            {/* Auto-generated transcript (videos only) */}
+            {preview.fileType === 'video' && (
+              <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left">
+                <p className="text-xs text-white/40 mb-1">📝 自動字幕（Whisper AI）</p>
+                {preview.transcript ? (
+                  <p className="text-white/90 text-sm leading-relaxed">{preview.transcript}</p>
+                ) : (
+                  <p className="text-white/30 text-xs italic">辨識中，請稍後重新開啟查看…</p>
+                )}
+              </div>
+            )}
+
             {/* Action buttons inside modal */}
             <div className="flex flex-wrap justify-center gap-3 mt-4">
               <button
