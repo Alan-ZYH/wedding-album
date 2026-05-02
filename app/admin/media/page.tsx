@@ -315,7 +315,7 @@ function MediaCard({
       />
 
       {/* Thumbnail */}
-      <div className="aspect-square cursor-pointer" onClick={onPreview}>
+      <div className="aspect-square cursor-pointer relative" onClick={onPreview}>
         {item.fileType === 'photo' ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
