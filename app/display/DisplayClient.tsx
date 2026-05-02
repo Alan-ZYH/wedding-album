@@ -13,25 +13,26 @@ export default function DisplayClient() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [loading, setLoading] = useState(true)
+  // audioUnlocked: true once the user has clicked anywhere on the display.
+  // Browsers require a user gesture before allowing unmuted autoplay.
+  const [audioUnlocked, setAudioUnlocked] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ── Feature 5: Real-time settings via Firestore onSnapshot ──
+  // Real-time settings via Firestore onSnapshot
   useEffect(() => {
     if (!db) return
     const unsub = onSnapshot(
       doc(db, 'settings', 'config'),
       (snap) => {
-        if (snap.exists()) {
-          setSettings({ ...DEFAULT_SETTINGS, ...snap.data() } as Settings)
-        }
+        if (snap.exists()) setSettings({ ...DEFAULT_SETTINGS, ...snap.data() } as Settings)
       },
-      () => {} // keep defaults on error
+      () => {}
     )
     return () => unsub()
   }, [])
 
-  // ── Feature 6: Real-time media (already using onSnapshot) ──
+  // Real-time media list
   useEffect(() => {
     if (!db) return
     const q = query(
@@ -43,18 +44,15 @@ export default function DisplayClient() {
     const unsub = onSnapshot(q, (snap) => {
       const items = snap.docs
         .map((d) => d.data() as Media)
-        // Feature 7: skip items that failed to display
         .filter((m) => !m.displayError)
-        .filter((m) => {
-          if (m.fileType === 'video' && !settings.playVideos) return false
-          return true
-        })
+        .filter((m) => !(m.fileType === 'video' && !settings.playVideos))
       setMedia(settings.randomPlayback ? shuffle(items) : items)
       setLoading(false)
     })
     return () => unsub()
   }, [settings.playVideos, settings.randomPlayback])
 
+  // Real-time messages
   useEffect(() => {
     if (!db) return
     const q = query(
@@ -72,7 +70,14 @@ export default function DisplayClient() {
     setCurrentIndex((prev) => (prev + 1) % Math.max(media.length, 1))
   }, [media.length])
 
+  // Clicking the display both advances the slide AND unlocks audio
+  const handleUserInteraction = useCallback(() => {
+    setAudioUnlocked(true)
+    goNext()
+  }, [goNext])
+
   const goPrev = () => {
+    setAudioUnlocked(true)
     setCurrentIndex((prev) => (prev - 1 + media.length) % Math.max(media.length, 1))
   }
 
@@ -81,13 +86,12 @@ export default function DisplayClient() {
     if (timerRef.current) clearTimeout(timerRef.current)
     const current = media[currentIndex]
     if (!current) return
-    // Videos manage their own advancement via onEnded
     if (current.fileType === 'video' && settings.playVideos) return
     timerRef.current = setTimeout(goNext, settings.slideInterval * 1000)
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [currentIndex, media, settings.slideInterval, settings.playVideos, goNext])
 
-  // Feature 7: mark a media item as having a display error
+  // Mark a media item as having a display error
   const markDisplayError = useCallback(async (mediaId: string) => {
     try {
       await fetch(`/api/media/${mediaId}`, {
@@ -99,6 +103,7 @@ export default function DisplayClient() {
   }, [])
 
   const toggleFullscreen = () => {
+    setAudioUnlocked(true)
     if (!document.fullscreenElement) {
       containerRef.current?.requestFullscreen()
       setIsFullscreen(true)
@@ -115,15 +120,17 @@ export default function DisplayClient() {
   }, [])
 
   const current = media[currentIndex]
-  // Pre-render the NEXT item so it's buffered before we switch to it
   const nextIndex = media.length > 1 ? (currentIndex + 1) % media.length : -1
   const nextItem = nextIndex >= 0 ? media[nextIndex] : null
+
+  // Show audio hint when: admin wants sound, user hasn't clicked yet, a video is playing
+  const showAudioHint = !settings.muteVideos && !audioUnlocked && current?.fileType === 'video' && settings.playVideos
 
   return (
     <div
       ref={containerRef}
       className="relative w-full h-screen bg-black overflow-hidden cursor-pointer"
-      onClick={goNext}
+      onClick={handleUserInteraction}
     >
       {loading ? (
         <div className="flex items-center justify-center h-full">
@@ -137,31 +144,40 @@ export default function DisplayClient() {
         <WaitingScreen albumName={settings.albumName || DEFAULT_SETTINGS.albumName} />
       ) : (
         <>
-          {/* Current slide */}
           {current && (
             <Slide
               key={current.id}
               item={current}
               settings={settings}
               active={true}
+              audioAllowed={audioUnlocked}
               onVideoEnd={goNext}
               onMediaError={() => { markDisplayError(current.id); goNext() }}
               transition={settings.slideTransition ?? 'fade'}
             />
           )}
-          {/* Next slide — hidden, pre-buffering to eliminate black-screen gap */}
           {nextItem && (
             <Slide
               key={nextItem.id}
               item={nextItem}
               settings={settings}
               active={false}
+              audioAllowed={audioUnlocked}
               onVideoEnd={goNext}
               onMediaError={() => { markDisplayError(nextItem.id) }}
               transition={settings.slideTransition ?? 'fade'}
             />
           )}
         </>
+      )}
+
+      {/* Audio unlock hint — appears when video is playing but audio needs user gesture */}
+      {showAudioHint && (
+        <div className="absolute bottom-20 left-0 right-0 flex justify-center z-25 pointer-events-none">
+          <div className="bg-black/60 text-white/80 text-sm px-5 py-2 rounded-full animate-pulse">
+            🔇 點擊螢幕以啟用聲音
+          </div>
+        </div>
       )}
 
       {settings.showDanmaku && messages.length > 0 && (
@@ -212,11 +228,12 @@ export default function DisplayClient() {
   )
 }
 
-// ── Slide component with double-buffer support ──
+// ── Slide component ──
 function Slide({
   item,
   settings,
   active,
+  audioAllowed,
   onVideoEnd,
   onMediaError,
   transition,
@@ -224,6 +241,7 @@ function Slide({
   item: Media
   settings: Settings
   active: boolean
+  audioAllowed: boolean
   onVideoEnd: () => void
   onMediaError: () => void
   transition: string
@@ -231,30 +249,41 @@ function Slide({
   const videoRef = useRef<HTMLVideoElement>(null)
   const errorReported = useRef(false)
 
-  // Reset error flag when item changes
   useEffect(() => {
     errorReported.current = false
   }, [item.id])
 
-  // Feature 8: Control video playback based on active state
-  // When active=false the video preloads silently; when active=true it starts playing.
+  // ── Effect 1: start / stop video when active changes ──
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
     if (active) {
+      // React's `muted` prop has a known bug — set the DOM property directly
+      v.muted = settings.muteVideos !== false || !audioAllowed
       v.currentTime = 0
       v.play().catch(() => {
-        // Autoplay blocked — retry muted
-        v.muted = true
-        v.play().catch(() => {})
+        if (!v.muted) {
+          // Browser blocked unmuted autoplay (no prior user gesture).
+          // Fall back to muted so video still plays; display shows a hint to click.
+          v.muted = true
+          v.play().catch(() => {})
+        }
       })
     } else {
       v.pause()
       v.currentTime = 0
     }
-  }, [active])
+  }, [active]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Safety fallback: if postMessage never fires, advance after 5 minutes
+  // ── Effect 2: update muted in real-time when settings or audio lock change ──
+  // Does NOT restart the video — only toggles the muted property on the live element.
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v || !active) return
+    v.muted = settings.muteVideos !== false || !audioAllowed
+  }, [active, audioAllowed, settings.muteVideos])
+
+  // Safety fallback: advance after 5 minutes if video never ends
   useEffect(() => {
     if (!active || item.fileType !== 'video' || !settings.playVideos) return
     const timer = setTimeout(onVideoEnd, 300_000)
@@ -269,16 +298,14 @@ function Slide({
     if (errorReported.current) return
     errorReported.current = true
     onMediaError()
-    if (active) onVideoEnd() // advance slide
+    if (active) onVideoEnd()
   }
 
   const handlePhotoError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.target as HTMLImageElement
     if (!img.src.includes('thumbnail')) {
-      // First fallback
       img.src = `https://drive.google.com/thumbnail?id=${item.googleDriveFileId}&sz=w1920`
     } else if (!errorReported.current) {
-      // Both URLs failed — report error
       errorReported.current = true
       onMediaError()
     }
@@ -287,12 +314,9 @@ function Slide({
   if (item.fileType === 'video' && settings.playVideos) {
     return (
       <div className={`${containerClass} flex items-center justify-center bg-black`}>
-        {/* Feature 8: direct <video> instead of iframe — eliminates iframe load overhead.
-            preload="auto" buffers data while active=false so playback starts instantly. */}
         <video
           ref={videoRef}
           src={`/api/video/${item.googleDriveFileId}`}
-          muted={settings.muteVideos !== false}
           playsInline
           preload="auto"
           onEnded={onVideoEnd}

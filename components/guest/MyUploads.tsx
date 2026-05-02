@@ -117,12 +117,24 @@ export default function MyUploads({ guestId }: Props) {
               </div>
             )}
 
-            {/* Status badge */}
-            {!item.approved && (
-              <div className="absolute top-1 left-1 bg-yellow-500/90 text-white text-xs px-1.5 py-0.5 rounded">
-                審核中
-              </div>
-            )}
+            {/* Status badges */}
+            <div className="absolute top-1 left-1 flex flex-col gap-0.5">
+              {!item.approved && (
+                <div className="bg-yellow-500/90 text-white text-xs px-1.5 py-0.5 rounded">
+                  審核中
+                </div>
+              )}
+              {item.fileType === 'video' && item.transcriptStatus === 'pending' && (
+                <div className="bg-blue-500/90 text-white text-xs px-1.5 py-0.5 rounded animate-pulse">
+                  字幕生成中
+                </div>
+              )}
+              {item.fileType === 'video' && item.transcriptStatus === 'error' && (
+                <div className="bg-red-500/90 text-white text-xs px-1.5 py-0.5 rounded">
+                  字幕失敗
+                </div>
+              )}
+            </div>
 
             {/* Delete button */}
             <button

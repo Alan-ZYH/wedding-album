@@ -247,10 +247,20 @@ function MediaPageContent() {
             {preview.fileType === 'video' && (
               <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left">
                 <p className="text-xs text-white/40 mb-1">📝 自動字幕（Whisper AI）</p>
-                {preview.transcript ? (
+                {preview.transcriptStatus === 'pending' && (
+                  <p className="text-blue-400 text-xs animate-pulse">⏳ 辨識中，通常需要 10–30 秒…</p>
+                )}
+                {preview.transcriptStatus === 'done' && preview.transcript && (
                   <p className="text-white/90 text-sm leading-relaxed">{preview.transcript}</p>
-                ) : (
-                  <p className="text-white/30 text-xs italic">辨識中，請稍後重新開啟查看…</p>
+                )}
+                {preview.transcriptStatus === 'done' && !preview.transcript && (
+                  <p className="text-white/30 text-xs italic">（無法偵測到語音）</p>
+                )}
+                {preview.transcriptStatus === 'error' && (
+                  <p className="text-orange-400 text-xs">⚠️ 辨識失敗，請確認 OPENAI_API_KEY 設定</p>
+                )}
+                {!preview.transcriptStatus && (
+                  <p className="text-white/30 text-xs italic">尚未辨識</p>
                 )}
               </div>
             )}
@@ -374,6 +384,12 @@ function MediaCard({
           )}
           {item.displayError && (
             <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">🚨 投放異常</span>
+          )}
+          {item.fileType === 'video' && item.transcriptStatus === 'pending' && (
+            <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded animate-pulse">⏳ 字幕中</span>
+          )}
+          {item.fileType === 'video' && item.transcriptStatus === 'error' && (
+            <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">⚠️ 字幕失敗</span>
           )}
         </div>
 

@@ -17,6 +17,7 @@ export interface Media {
   approved: boolean
   displayError?: boolean  // true when display client reports a playback/load failure
   transcript?: string     // auto-generated caption from OpenAI Whisper (videos only)
+  transcriptStatus?: 'pending' | 'done' | 'error' // Whisper job state
 }
 
 export interface Message {

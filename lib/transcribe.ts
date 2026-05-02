@@ -45,12 +45,18 @@ export async function transcribeVideo(
     const transcript = result.text?.trim() ?? ''
     console.log(`[transcribe] result: "${transcript}"`)
 
-    // 3. Save transcript to Firestore (onSnapshot on display/admin picks it up instantly)
-    if (transcript) {
-      await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).update({ transcript })
-    }
+    // 3. Save transcript + mark done (onSnapshot propagates to display/admin instantly)
+    await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).update({
+      transcript: transcript || '',
+      transcriptStatus: 'done',
+    })
   } catch (err) {
     // Non-fatal — a transcription failure must never break the upload
     console.error('[transcribe] error:', err instanceof Error ? err.message : String(err))
+    try {
+      await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).update({
+        transcriptStatus: 'error',
+      })
+    } catch {}
   }
 }
