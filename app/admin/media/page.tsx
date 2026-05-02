@@ -197,23 +197,33 @@ function MediaPageContent() {
           className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
           onClick={() => setPreview(null)}
         >
-          <button className="absolute top-4 right-4 text-white text-3xl" onClick={() => setPreview(null)}>×</button>
+          <button className="absolute top-4 right-4 text-white text-3xl leading-none" onClick={() => setPreview(null)}>×</button>
           <div onClick={(e) => e.stopPropagation()} className="max-w-3xl w-full">
+            {/* Media preview */}
             {preview.fileType === 'photo' ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={`https://drive.google.com/uc?export=view&id=${preview.googleDriveFileId}`}
+                src={`https://lh3.googleusercontent.com/d/${preview.googleDriveFileId}=w1920`}
                 alt={preview.fileName}
-                className="max-w-full max-h-[75vh] object-contain rounded-xl mx-auto block"
+                className="max-w-full max-h-[65vh] object-contain rounded-xl mx-auto block"
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement
+                  if (!img.src.includes('thumbnail')) {
+                    img.src = `https://drive.google.com/thumbnail?id=${preview.googleDriveFileId}&sz=w1920`
+                  }
+                }}
               />
             ) : (
-              <video
-                src={`https://drive.google.com/uc?export=download&id=${preview.googleDriveFileId}`}
-                controls
-                autoPlay
-                className="max-w-full max-h-[75vh] rounded-xl mx-auto block"
+              <iframe
+                src={`https://drive.google.com/file/d/${preview.googleDriveFileId}/preview`}
+                allow="autoplay; fullscreen"
+                allowFullScreen
+                className="w-full rounded-xl mx-auto block"
+                style={{ height: '60vh', border: 'none' }}
               />
             )}
+
+            {/* Info */}
             <div className="text-white text-sm text-center mt-3 space-y-1">
               <p className="font-medium">{preview.guestName}</p>
               <p className="opacity-60">{preview.fileName}</p>
@@ -229,6 +239,42 @@ function MediaPageContent() {
               >
                 在 Google Drive 中查看 →
               </a>
+            </div>
+
+            {/* Action buttons inside modal */}
+            <div className="flex justify-center gap-3 mt-4">
+              <button
+                onClick={() => {
+                  updateMedia(preview.id, { approved: !preview.approved })
+                  setPreview((p) => p ? { ...p, approved: !p.approved } : null)
+                }}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                  preview.approved
+                    ? 'bg-gray-600 hover:bg-gray-500 text-white'
+                    : 'bg-green-600 hover:bg-green-500 text-white'
+                }`}
+              >
+                {preview.approved ? '取消通過' : '✓ 通過'}
+              </button>
+              <button
+                onClick={() => {
+                  const newStatus = preview.status === 'hidden' ? 'active' : 'hidden'
+                  updateMedia(preview.id, { status: newStatus })
+                  setPreview((p) => p ? { ...p, status: newStatus } : null)
+                }}
+                className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-600 hover:bg-gray-500 text-white transition-colors"
+              >
+                {preview.status === 'hidden' ? '👁 顯示' : '🙈 隱藏'}
+              </button>
+              <button
+                onClick={() => {
+                  deleteMedia(preview.id)
+                  setPreview(null)
+                }}
+                className="px-4 py-2 rounded-xl text-sm font-medium bg-red-700 hover:bg-red-600 text-white transition-colors"
+              >
+                🗑 刪除
+              </button>
             </div>
           </div>
         </div>
