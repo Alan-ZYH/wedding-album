@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
-import { setDriveFilePublic, buildThumbnailUrl } from '@/lib/google-drive'
+import { findFileByName, setDriveFilePublic, buildThumbnailUrl } from '@/lib/google-drive'
 import { getSettings } from '@/lib/settings'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { isGuestAuthenticated } from '@/lib/guest-auth'
@@ -11,20 +11,19 @@ export const dynamic = 'force-dynamic'
 /**
  * POST /api/upload/complete
  *
- * Called by the browser after it has successfully uploaded a file directly
- * to Google Drive.  This route:
- *   1. Makes the Drive file publicly readable.
- *   2. Saves the media metadata to Firestore.
+ * Called by the browser after it has uploaded a file directly to Google Drive.
+ * Because CORS prevents the browser from reading the Drive upload response,
+ * we don't receive the fileId from the client — instead we search Drive by
+ * the exact fileName generated in /api/upload/init.
  *
  * Body (JSON):
- *   mediaId             string
- *   googleDriveFileId   string
- *   guestId             string
- *   guestName           string
- *   fileName            string
- *   mimeType            string
- *   fileSize            number
- *   fileType            'photo' | 'video'
+ *   mediaId    string
+ *   guestId    string
+ *   guestName  string
+ *   fileName   string   ← used to locate the file in Drive
+ *   mimeType   string
+ *   fileSize   number
+ *   fileType   'photo' | 'video'
  */
 export async function POST(req: NextRequest) {
   // Auth check
@@ -35,22 +34,29 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const {
-      mediaId,
-      googleDriveFileId,
-      guestId,
-      guestName,
-      fileName,
-      mimeType,
-      fileSize,
-      fileType,
-    } = body
+    const { mediaId, guestId, guestName, fileName, mimeType, fileSize, fileType } = body
 
-    if (!mediaId || !googleDriveFileId || !guestId || !guestName || !fileName) {
+    if (!mediaId || !guestId || !guestName || !fileName) {
       return NextResponse.json({ success: false, error: '缺少必要資訊' }, { status: 400 })
     }
 
-    // Make the Drive file publicly readable and get its webViewLink
+    // Find the file in Drive by its exact name (retry up to 5× with 1s delay each)
+    let googleDriveFileId: string | null = null
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 1000))
+      googleDriveFileId = await findFileByName(fileName)
+      if (googleDriveFileId) break
+    }
+
+    if (!googleDriveFileId) {
+      console.error(`complete: file not found in Drive after retries — fileName=${fileName}`)
+      return NextResponse.json(
+        { success: false, error: '找不到已上傳的檔案，請重試' },
+        { status: 404 }
+      )
+    }
+
+    // Make the Drive file publicly readable
     const { webViewLink } = await setDriveFilePublic(googleDriveFileId)
 
     // Load approval settings
@@ -78,7 +84,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, mediaId })
   } catch (err) {
-    console.error('POST /api/upload/complete error:', err)
-    return NextResponse.json({ success: false, error: '完成上傳失敗' }, { status: 500 })
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('POST /api/upload/complete error:', msg)
+    return NextResponse.json({ success: false, error: `完成上傳失敗: ${msg}` }, { status: 500 })
   }
 }

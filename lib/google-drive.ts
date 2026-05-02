@@ -193,6 +193,21 @@ export async function setDriveFilePublic(
   }
 }
 
+// Search Google Drive for a file by its exact name.
+// Returns the file ID if found, or null.
+export async function findFileByName(fileName: string): Promise<string | null> {
+  const drive = getDriveClient()
+  const res = await drive.files.list({
+    q: `name='${fileName}' and trashed=false`,
+    fields: 'files(id)',
+    orderBy: 'createdTime desc',
+    pageSize: 1,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  })
+  return res.data.files?.[0]?.id ?? null
+}
+
 export async function deleteFileFromDrive(fileId: string): Promise<void> {
   const drive = getDriveClient()
   await drive.files.delete({
