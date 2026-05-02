@@ -160,14 +160,24 @@ export default function DisplayClient() {
 }
 
 function Slide({ item, settings, onVideoEnd, transition }: { item: Media; settings: Settings; onVideoEnd: () => void; transition: string }) {
+  // Auto-advance videos after 2 minutes (iframe has no onEnded callback)
+  useEffect(() => {
+    if (item.fileType !== 'video' || !settings.playVideos) return
+    const timer = setTimeout(onVideoEnd, 120_000)
+    return () => clearTimeout(timer)
+  }, [item.id, item.fileType, settings.playVideos, onVideoEnd])
+
   if (item.fileType === 'video' && settings.playVideos) {
     return (
-      <div className="w-full h-full flex items-center justify-center relative">
-        <video
+      <div className="w-full h-full flex items-center justify-center bg-black relative">
+        {/* Google Drive iframe player – most reliable way to play Drive-hosted videos */}
+        <iframe
           key={item.id}
-          src={`https://drive.google.com/uc?export=download&id=${item.googleDriveFileId}`}
-          autoPlay muted={settings.muteVideos} playsInline onEnded={onVideoEnd}
-          className="max-w-full max-h-full object-contain"
+          src={`https://drive.google.com/file/d/${item.googleDriveFileId}/preview`}
+          allow="autoplay; fullscreen"
+          allowFullScreen
+          className="w-full h-full"
+          style={{ border: 'none' }}
         />
         {settings.showGuestName && <GuestNameBadge name={item.guestName} />}
       </div>
