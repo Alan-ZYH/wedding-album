@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import { Media } from '@/types'
 
 function MediaPageContent() {
@@ -18,16 +20,16 @@ function MediaPageContent() {
   const [preview, setPreview] = useState<Media | null>(null)
   const [processing, setProcessing] = useState<string | null>(null)
 
-  const fetchMedia = useCallback(async () => {
-    try {
-      const res = await fetch('/api/media')
-      const data = await res.json()
-      if (data.success) setMedia(data.data)
-    } catch {}
-    finally { setLoading(false) }
+  // Real-time listener — updates instantly when guests upload
+  useEffect(() => {
+    if (!db) return
+    const q = query(collection(db, 'media'), orderBy('uploadTime', 'desc'))
+    const unsub = onSnapshot(q, (snap) => {
+      setMedia(snap.docs.map((d) => d.data() as Media))
+      setLoading(false)
+    }, () => { setLoading(false) })
+    return () => unsub()
   }, [])
-
-  useEffect(() => { fetchMedia() }, [fetchMedia])
 
   const filtered = media.filter((m) => {
     if (m.status === 'deleted') return false
