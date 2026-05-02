@@ -60,6 +60,15 @@ export default function DisplayClient() {
     setCurrentIndex((prev) => (prev + 1) % Math.max(media.length, 1))
   }, [media.length])
 
+  // Listen for videoEnded postMessage from same-origin video-player iframe
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'videoEnded') goNext()
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [goNext])
+
   const goPrev = () => {
     setCurrentIndex((prev) => (prev - 1 + media.length) % Math.max(media.length, 1))
   }
@@ -160,20 +169,20 @@ export default function DisplayClient() {
 }
 
 function Slide({ item, settings, onVideoEnd, transition }: { item: Media; settings: Settings; onVideoEnd: () => void; transition: string }) {
-  // Auto-advance videos after 2 minutes (iframe has no onEnded callback)
+  // Fallback: auto-advance video after 5 minutes if postMessage never fires
   useEffect(() => {
     if (item.fileType !== 'video' || !settings.playVideos) return
-    const timer = setTimeout(onVideoEnd, 120_000)
+    const timer = setTimeout(onVideoEnd, 300_000)
     return () => clearTimeout(timer)
   }, [item.id, item.fileType, settings.playVideos, onVideoEnd])
 
   if (item.fileType === 'video' && settings.playVideos) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-black relative">
-        {/* Google Drive iframe player – most reliable way to play Drive-hosted videos */}
+        {/* Same-origin video player — autoplay works, onEnded via postMessage */}
         <iframe
           key={item.id}
-          src={`https://drive.google.com/file/d/${item.googleDriveFileId}/preview`}
+          src={`/api/video-player/${item.googleDriveFileId}`}
           allow="autoplay; fullscreen"
           allowFullScreen
           className="w-full h-full"

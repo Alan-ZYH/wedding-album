@@ -3,7 +3,7 @@ import { Readable } from 'stream'
 
 const ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID!
 
-function getAuth() {
+export function getAuth() {
   const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
     ? process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.replace(/\\n/g, '\n')
     : undefined
