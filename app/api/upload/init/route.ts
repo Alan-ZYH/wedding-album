@@ -76,7 +76,9 @@ export async function POST(req: NextRequest) {
       fileType: validation.fileType, // 'photo' | 'video'
     })
   } catch (err) {
-    console.error('POST /api/upload/init error:', err)
-    return NextResponse.json({ success: false, error: '初始化上傳失敗' }, { status: 500 })
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('POST /api/upload/init error:', msg)
+    // Return the raw error message so we can diagnose from the browser
+    return NextResponse.json({ success: false, error: `初始化上傳失敗: ${msg}` }, { status: 500 })
   }
 }
