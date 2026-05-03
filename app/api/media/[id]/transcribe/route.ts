@@ -5,10 +5,13 @@
  * Called:
  *   - by the guest's browser right after upload (fire-and-forget)
  *   - by the admin panel "重試字幕" button
+ *   - by the guest "字幕失敗・重試" button
  *
- * This is a dedicated route so it gets a fresh execution budget separate
- * from the upload/complete route, making it reliable on Vercel Hobby (10 s limit).
- * The streaming Drive→Whisper pipeline typically completes in ~5–7 s.
+ * Optimisations to fit within Vercel Hobby's 10-second limit:
+ *   - fileSize is forwarded from Firestore so transcribeVideo can skip the
+ *     extra Drive metadata API call
+ *   - The "reset to pending" Firestore write is fire-and-forget so
+ *     transcription starts immediately without waiting for it
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -19,7 +22,7 @@ import { transcribeVideo } from '@/lib/transcribe'
 import { Media } from '@/types'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60 // allow up to 60 s (capped at 10 s on Hobby, 300 s on Pro)
+export const maxDuration = 60 // capped at 10 s on Hobby, 300 s on Pro
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -43,11 +46,20 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: '僅影片可生成字幕' }, { status: 400 })
     }
 
-    // Reset to pending so the UI shows progress immediately
-    await docRef.update({ transcriptStatus: 'pending', transcript: '', transcriptNote: '' })
+    // Fire-and-forget: reset to pending so the UI updates immediately, but
+    // don't block — transcription should start as soon as possible.
+    docRef.update({ transcriptStatus: 'pending', transcript: '', transcriptNote: '' })
+      .catch(() => {})
 
-    // Run transcription synchronously — this route's entire budget goes to Whisper
-    await transcribeVideo(id, media.googleDriveFileId, media.fileName, media.mimeType)
+    // Run transcription synchronously; pass known fileSize to skip an extra
+    // Drive API metadata call inside transcribeVideo.
+    await transcribeVideo(
+      id,
+      media.googleDriveFileId,
+      media.fileName,
+      media.mimeType,
+      media.fileSize,
+    )
 
     return NextResponse.json({ success: true })
   } catch (err) {
