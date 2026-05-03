@@ -186,18 +186,6 @@ export default function UploadForm({ guestId, guestName }: Props) {
           continue
         }
 
-        // For videos: kick off Whisper transcription in the background.
-        // Send the original file directly to Groq/OpenAI — no re-download from Drive needed.
-        // Fire-and-forget: guest sees status updates via Firestore onSnapshot.
-        if (fileType === 'video') {
-          const form = new FormData()
-          form.append('file', file)
-          form.append('mediaId', mediaId)
-          form.append('fileName', file.name)
-          form.append('mimeType', file.type)
-          fetch('/api/transcribe-file', { method: 'POST', body: form }).catch(() => {})
-        }
-
         succeeded++
       } catch (err) {
         console.error('Upload error', err)

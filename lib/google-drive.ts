@@ -208,30 +208,15 @@ export async function findFileByName(fileName: string): Promise<string | null> {
   return res.data.files?.[0]?.id ?? null
 }
 
-// Get Drive file size (metadata only — fast, no download).
-export async function getDriveFileSize(fileId: string): Promise<number> {
-  const drive = getDriveClient()
-  const res = await drive.files.get({
-    fileId, fields: 'size', supportsAllDrives: true,
-  })
-  return parseInt((res.data as { size?: string }).size || '0', 10)
-}
-
-// Return a readable stream of the Drive file without buffering it all in memory.
-// Piping this directly to OpenAI Whisper is faster than downloading first.
-export async function getDriveFileStream(fileId: string): Promise<NodeJS.ReadableStream> {
+// Download a Drive file and return its content as a Buffer.
+export async function downloadDriveFile(fileId: string): Promise<Buffer> {
   const drive = getDriveClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const res = await (drive.files.get as any)(
     { fileId, alt: 'media', supportsAllDrives: true },
     { responseType: 'stream' }
   )
-  return res.data as NodeJS.ReadableStream
-}
-
-// Download a Drive file and return its content as a Buffer (kept for other callers).
-export async function downloadDriveFile(fileId: string): Promise<Buffer> {
-  const stream = await getDriveFileStream(fileId)
+  const stream = res.data as NodeJS.ReadableStream
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     stream.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)))

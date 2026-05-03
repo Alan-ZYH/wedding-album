@@ -105,14 +105,6 @@ function MediaPageContent() {
     }
   }
 
-  const retryTranscript = async (id: string) => {
-    setProcessing(id)
-    try {
-      await fetch(`/api/media/${id}/transcribe`, { method: 'POST' })
-    } catch {}
-    finally { setProcessing(null) }
-  }
-
   if (loading) return <div className="text-center py-16 text-gray-400">載入中...</div>
 
   return (
@@ -251,41 +243,6 @@ function MediaPageContent() {
               </a>
             </div>
 
-            {/* Auto-generated transcript (videos only) */}
-            {preview.fileType === 'video' && (
-              <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left">
-                <p className="text-xs text-white/40 mb-1">📝 自動字幕（Whisper AI）</p>
-                {preview.transcriptStatus === 'pending' && (
-                  <p className="text-blue-400 text-xs animate-pulse">⏳ 辨識中，通常需要 10–30 秒…</p>
-                )}
-                {preview.transcriptStatus === 'done' && preview.transcript && (
-                  <p className="text-white/90 text-sm leading-relaxed">{preview.transcript}</p>
-                )}
-                {preview.transcriptStatus === 'done' && !preview.transcript && (
-                  <p className="text-white/30 text-xs italic">
-                    {preview.transcriptNote || '（無法偵測到語音）'}
-                  </p>
-                )}
-                {preview.transcriptStatus === 'error' && (
-                  <div className="space-y-1">
-                    <p className="text-orange-400 text-xs">⚠️ 辨識失敗</p>
-                    {preview.transcriptNote && (
-                      <p className="text-white/30 text-xs font-mono break-all">{preview.transcriptNote}</p>
-                    )}
-                    <button
-                      onClick={() => retryTranscript(preview.id)}
-                      className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-lg mt-1 transition-colors"
-                    >
-                      🔄 重試字幕
-                    </button>
-                  </div>
-                )}
-                {!preview.transcriptStatus && (
-                  <p className="text-white/30 text-xs italic">尚未辨識</p>
-                )}
-              </div>
-            )}
-
             {/* Action buttons inside modal */}
             <div className="flex flex-wrap justify-center gap-3 mt-4">
               <button
@@ -405,12 +362,6 @@ function MediaCard({
           )}
           {item.displayError && (
             <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">🚨 投放異常</span>
-          )}
-          {item.fileType === 'video' && item.transcriptStatus === 'pending' && (
-            <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded animate-pulse">⏳ 字幕中</span>
-          )}
-          {item.fileType === 'video' && item.transcriptStatus === 'error' && (
-            <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">⚠️ 字幕失敗</span>
           )}
         </div>
 

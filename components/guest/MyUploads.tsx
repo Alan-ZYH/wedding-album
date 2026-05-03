@@ -9,23 +9,11 @@ interface Props {
   guestId: string
 }
 
-// After this many seconds, a still-pending video is considered stuck
-// (Vercel function was silently killed before writing an error status)
-const STUCK_TIMEOUT_SEC = 60
-
 export default function MyUploads({ guestId }: Props) {
   const [media, setMedia] = useState<Media[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [retrying, setRetrying] = useState<string | null>(null)
   const [preview, setPreview] = useState<Media | null>(null)
-  // Ticks every 15 s so stuck-video detection re-evaluates without waiting for user interaction
-  const [, setTick] = useState(0)
-
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 15_000)
-    return () => clearInterval(id)
-  }, [])
 
   // Real-time listener — updates immediately after upload or hide
   useEffect(() => {
@@ -65,14 +53,6 @@ export default function MyUploads({ guestId }: Props) {
     finally { setDeleting(null) }
   }
 
-  const retryTranscript = async (id: string) => {
-    setRetrying(id)
-    try {
-      await fetch(`/api/media/${id}/transcribe`, { method: 'POST' })
-    } catch {}
-    finally { setRetrying(null) }
-  }
-
   if (loading) {
     return (
       <div className="py-12 text-center">
@@ -100,85 +80,54 @@ export default function MyUploads({ guestId }: Props) {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        {media.map((item) => {
-          // Detect stuck-pending: still pending after STUCK_TIMEOUT_SEC seconds
-          const elapsedSec = (Date.now() - new Date(item.uploadTime).getTime()) / 1000
-          const isStuck = item.fileType === 'video'
-            && item.transcriptStatus === 'pending'
-            && elapsedSec > STUCK_TIMEOUT_SEC
-          const needsRetry = item.fileType === 'video'
-            && (item.transcriptStatus === 'error' || isStuck)
-          const isPending = item.fileType === 'video'
-            && item.transcriptStatus === 'pending'
-            && !isStuck
-
-          return (
-            <div
-              key={item.id}
-              className="relative aspect-square bg-gray-100 rounded-xl overflow-hidden group"
-            >
-              {item.fileType === 'photo' ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={`https://lh3.googleusercontent.com/d/${item.googleDriveFileId}=w400`}
-                  alt={item.fileName}
-                  className="w-full h-full object-cover cursor-pointer"
-                  onClick={() => setPreview(item)}
-                  onError={(e) => {
-                    const img = e.target as HTMLImageElement
-                    if (!img.src.includes('uc?export')) {
-                      img.src = `https://drive.google.com/uc?export=view&id=${item.googleDriveFileId}`
-                    }
-                  }}
-                />
-              ) : (
-                <div
-                  className="w-full h-full flex flex-col items-center justify-center bg-gray-800 cursor-pointer"
-                  onClick={() => setPreview(item)}
-                >
-                  <span className="text-2xl">🎬</span>
-                  <span className="text-xs text-white mt-1 px-1 truncate w-full text-center">
-                    {item.fileName.split('.').pop()?.toUpperCase()}
-                  </span>
-                </div>
-              )}
-
-              {/* Status badges */}
-              <div className="absolute top-1 left-1 flex flex-col gap-0.5">
-                {!item.approved && (
-                  <div className="bg-yellow-500/90 text-white text-xs px-1.5 py-0.5 rounded">
-                    審核中
-                  </div>
-                )}
-
-                {/* Transcript status */}
-                {isPending && (
-                  <div className="bg-blue-500/90 text-white text-xs px-1.5 py-0.5 rounded animate-pulse">
-                    字幕生成中
-                  </div>
-                )}
-                {needsRetry && (
-                  <button
-                    disabled={retrying === item.id}
-                    onClick={(e) => { e.stopPropagation(); retryTranscript(item.id) }}
-                    className="bg-orange-500/90 hover:bg-orange-600 active:bg-orange-700 text-white text-xs px-1.5 py-0.5 rounded transition-colors"
-                  >
-                    {retrying === item.id ? '重試中…' : '字幕失敗・重試'}
-                  </button>
-                )}
-              </div>
-
-              {/* Delete button */}
-              <button
-                onClick={() => handleDelete(item.id)}
-                disabled={deleting === item.id}
-                className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs transition-colors opacity-0 group-hover:opacity-100"
+        {media.map((item) => (
+          <div
+            key={item.id}
+            className="relative aspect-square bg-gray-100 rounded-xl overflow-hidden group"
+          >
+            {item.fileType === 'photo' ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`https://lh3.googleusercontent.com/d/${item.googleDriveFileId}=w400`}
+                alt={item.fileName}
+                className="w-full h-full object-cover cursor-pointer"
+                onClick={() => setPreview(item)}
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement
+                  if (!img.src.includes('uc?export')) {
+                    img.src = `https://drive.google.com/uc?export=view&id=${item.googleDriveFileId}`
+                  }
+                }}
+              />
+            ) : (
+              <div
+                className="w-full h-full flex flex-col items-center justify-center bg-gray-800 cursor-pointer"
+                onClick={() => setPreview(item)}
               >
-                {deleting === item.id ? '...' : '×'}
-              </button>
-            </div>
-          )
-        })}
+                <span className="text-2xl">🎬</span>
+                <span className="text-xs text-white mt-1 px-1 truncate w-full text-center">
+                  {item.fileName.split('.').pop()?.toUpperCase()}
+                </span>
+              </div>
+            )}
+
+            {/* Approval badge */}
+            {!item.approved && (
+              <div className="absolute top-1 left-1 bg-yellow-500/90 text-white text-xs px-1.5 py-0.5 rounded">
+                審核中
+              </div>
+            )}
+
+            {/* Delete button */}
+            <button
+              onClick={() => handleDelete(item.id)}
+              disabled={deleting === item.id}
+              className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs transition-colors opacity-0 group-hover:opacity-100"
+            >
+              {deleting === item.id ? '...' : '×'}
+            </button>
+          </div>
+        ))}
       </div>
 
       {/* Preview Modal */}

@@ -7,7 +7,6 @@ import { isGuestAuthenticated } from '@/lib/guest-auth'
 import { Media } from '@/types'
 
 export const dynamic = 'force-dynamic'
-// Raise timeout so after() has enough time to download the video and run Whisper
 export const maxDuration = 60
 
 /**
@@ -80,16 +79,9 @@ export async function POST(req: NextRequest) {
       uploadTime: now.toISOString(),
       status: 'active',
       approved: !settings.requireApproval,
-      // Videos start with transcriptStatus:'pending'; updated by transcribeVideo()
-      ...(fileType === 'video' && { transcriptStatus: 'pending' as const }),
     }
 
     await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).set(media)
-
-    // Transcription is triggered separately by the guest's browser via
-    // POST /api/media/[id]/transcribe (fire-and-forget after this response).
-    // This gives transcription its own fresh execution budget instead of sharing
-    // the complete route's already-consumed time.
 
     return NextResponse.json({ success: true, mediaId })
   } catch (err) {
