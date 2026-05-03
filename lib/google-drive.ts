@@ -1,5 +1,4 @@
 import { google } from 'googleapis'
-import { Readable } from 'stream'
 
 const ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID!
 
@@ -71,62 +70,6 @@ export async function ensureFolders(): Promise<{
   return { photos, videos, thumbnails }
 }
 
-export interface UploadFileResult {
-  fileId: string
-  webViewLink: string
-  thumbnailLink: string
-}
-
-export async function uploadFileToDrive(
-  buffer: Buffer,
-  fileName: string,
-  mimeType: string,
-  isVideo: boolean
-): Promise<UploadFileResult> {
-  const drive = getDriveClient()
-  const folders = await ensureFolders()
-  const folderId = isVideo ? folders.videos : folders.photos
-
-  const readable = Readable.from(buffer)
-
-  const res = await drive.files.create({
-    requestBody: {
-      name: fileName,
-      parents: [folderId],
-    },
-    media: {
-      mimeType,
-      body: readable,
-    },
-    fields: 'id,webViewLink,thumbnailLink',
-    supportsAllDrives: true,
-  })
-
-  const fileId = res.data.id!
-
-  // Make file publicly readable
-  await drive.permissions.create({
-    fileId,
-    requestBody: {
-      role: 'reader',
-      type: 'anyone',
-    },
-    supportsAllDrives: true,
-  })
-
-  const fileInfo = await drive.files.get({
-    fileId,
-    fields: 'id,webViewLink,thumbnailLink',
-    supportsAllDrives: true,
-  })
-
-  return {
-    fileId,
-    webViewLink: fileInfo.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`,
-    thumbnailLink: fileInfo.data.thumbnailLink || '',
-  }
-}
-
 // Create a resumable upload session on Google Drive.
 // Returns the session upload URL (valid ~1 week).
 // The client then PUTs the file bytes directly to this URL — bypassing Vercel's 4.5 MB limit.
@@ -137,7 +80,6 @@ export async function createResumableUploadSession(
   isVideo: boolean
 ): Promise<string> {
   const auth = getAuth()
-  // getAccessToken() returns the raw bearer token string
   const token = await auth.getAccessToken()
   if (!token) throw new Error('Failed to obtain Google access token')
 
@@ -208,23 +150,6 @@ export async function findFileByName(fileName: string): Promise<string | null> {
   return res.data.files?.[0]?.id ?? null
 }
 
-// Download a Drive file and return its content as a Buffer.
-export async function downloadDriveFile(fileId: string): Promise<Buffer> {
-  const drive = getDriveClient()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const res = await (drive.files.get as any)(
-    { fileId, alt: 'media', supportsAllDrives: true },
-    { responseType: 'stream' }
-  )
-  const stream = res.data as NodeJS.ReadableStream
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = []
-    stream.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)))
-    stream.on('end', () => resolve(Buffer.concat(chunks)))
-    stream.on('error', reject)
-  })
-}
-
 export async function deleteFileFromDrive(fileId: string): Promise<void> {
   const drive = getDriveClient()
   await drive.files.delete({
@@ -235,8 +160,4 @@ export async function deleteFileFromDrive(fileId: string): Promise<void> {
 
 export function buildThumbnailUrl(fileId: string): string {
   return `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`
-}
-
-export function buildDirectUrl(fileId: string): string {
-  return `https://drive.google.com/uc?export=view&id=${fileId}`
 }

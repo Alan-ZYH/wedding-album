@@ -37,11 +37,11 @@ export interface FileValidation {
 
 export function validateFile(mimeType: string, fileSize: number): FileValidation {
   if (ALLOWED_IMAGE_TYPES.includes(mimeType)) {
-    if (fileSize > MAX_IMAGE_SIZE) return { valid: false, error: `圖片大小不可超過 20MB` }
+    if (fileSize > MAX_IMAGE_SIZE) return { valid: false, error: `圖片大小不可超過 50MB` }
     return { valid: true, fileType: 'photo' }
   }
   if (ALLOWED_VIDEO_TYPES.includes(mimeType)) {
-    if (fileSize > MAX_VIDEO_SIZE) return { valid: false, error: `影片大小不可超過 300MB` }
+    if (fileSize > MAX_VIDEO_SIZE) return { valid: false, error: `影片大小不可超過 500MB` }
     return { valid: true, fileType: 'video' }
   }
   // HEIC by extension fallback

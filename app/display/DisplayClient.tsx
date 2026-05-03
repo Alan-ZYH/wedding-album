@@ -189,11 +189,11 @@ export default function DisplayClient() {
               audioAllowed={audioUnlocked}
               onVideoEnd={goNext}
               onMediaError={() => {
-                if (nextItem.fileType === 'video') {
-                  skipVideo(nextItem.id)
-                } else {
-                  markDisplayError(nextItem.id)
-                }
+                // Preloading slot (inactive) — don't permanently mark photos as broken
+                // before the user has even seen them. Let errors surface when the item
+                // becomes active and is actually displayed.
+                if (nextItem.fileType === 'video') skipVideo(nextItem.id)
+                // photos: no-op here; will be handled when they become active
               }}
               transition={settings.slideTransition ?? 'fade'}
             />

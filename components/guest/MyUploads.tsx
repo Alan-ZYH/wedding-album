@@ -146,13 +146,13 @@ export default function MyUploads({ guestId }: Props) {
             {preview.fileType === 'photo' ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={`https://drive.google.com/uc?export=view&id=${preview.googleDriveFileId}`}
+                src={`https://lh3.googleusercontent.com/d/${preview.googleDriveFileId}=w1920`}
                 alt={preview.fileName}
                 className="max-w-full max-h-[80vh] object-contain rounded-lg"
               />
             ) : (
               <video
-                src={`https://drive.google.com/uc?export=download&id=${preview.googleDriveFileId}`}
+                src={`https://lh3.googleusercontent.com/d/${preview.googleDriveFileId}`}
                 controls
                 className="max-w-full max-h-[80vh] rounded-lg"
               />
