@@ -9,6 +9,13 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  // Change-password state
+  const [pwCurrent, setPwCurrent]   = useState('')
+  const [pwNew, setPwNew]           = useState('')
+  const [pwConfirm, setPwConfirm]   = useState('')
+  const [pwSaving, setPwSaving]     = useState(false)
+  const [pwMsg, setPwMsg]           = useState<{ ok: boolean; text: string } | null>(null)
+
   useEffect(() => {
     fetch('/api/settings')
       .then((r) => r.json())
@@ -36,6 +43,35 @@ export default function SettingsPage() {
 
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     setSettings((s) => ({ ...s, [key]: value }))
+  }
+
+  const handleChangePassword = async () => {
+    if (!pwCurrent || !pwNew || !pwConfirm) {
+      setPwMsg({ ok: false, text: '請填寫所有欄位' }); return
+    }
+    if (pwNew !== pwConfirm) {
+      setPwMsg({ ok: false, text: '新密碼與確認密碼不一致' }); return
+    }
+    if (pwNew.length < 4) {
+      setPwMsg({ ok: false, text: '新密碼至少需要 4 個字元' }); return
+    }
+    setPwSaving(true); setPwMsg(null)
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: pwCurrent, newPassword: pwNew }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setPwMsg({ ok: true, text: '密碼已更新' })
+        setPwCurrent(''); setPwNew(''); setPwConfirm('')
+      } else {
+        setPwMsg({ ok: false, text: data.error || '更新失敗' })
+      }
+    } catch {
+      setPwMsg({ ok: false, text: '網路錯誤，請重試' })
+    } finally { setPwSaving(false) }
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">載入中...</div>
@@ -127,6 +163,58 @@ export default function SettingsPage() {
             value={settings.muteVideos}
             onChange={(v) => update('muteVideos', v)}
           />
+        </Section>
+
+        {/* Password section */}
+        <Section title="管理員密碼" icon="🔑">
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">目前密碼</label>
+              <input
+                type="password"
+                value={pwCurrent}
+                onChange={(e) => setPwCurrent(e.target.value)}
+                placeholder="請輸入目前密碼"
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#c9a84c]"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">新密碼</label>
+              <input
+                type="password"
+                value={pwNew}
+                onChange={(e) => setPwNew(e.target.value)}
+                placeholder="至少 4 個字元"
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#c9a84c]"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">確認新密碼</label>
+              <input
+                type="password"
+                value={pwConfirm}
+                onChange={(e) => setPwConfirm(e.target.value)}
+                placeholder="再輸入一次新密碼"
+                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#c9a84c]"
+              />
+            </div>
+            {pwMsg && (
+              <p className={`text-xs ${pwMsg.ok ? 'text-green-600' : 'text-red-500'}`}>
+                {pwMsg.ok ? '✓ ' : '⚠ '}{pwMsg.text}
+              </p>
+            )}
+            <button
+              onClick={handleChangePassword}
+              disabled={pwSaving}
+              className={`w-full py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                pwSaving
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-[#c9a84c] hover:bg-[#b8953d] text-white'
+              }`}
+            >
+              {pwSaving ? '更新中...' : '更新密碼'}
+            </button>
+          </div>
         </Section>
 
         {/* Danmaku section */}

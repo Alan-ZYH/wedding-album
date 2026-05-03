@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { signAdminToken, getAdminCookieOptions } from '@/lib/auth'
+import { adminDb } from '@/lib/firebase-admin'
 
 export async function POST(req: NextRequest) {
   try {
     const { password } = await req.json()
 
-    const adminPassword = process.env.ADMIN_PASSWORD
+    // Password priority:
+    //   1. Firestore settings/config.adminPassword (set via change-password API)
+    //   2. ADMIN_PASSWORD environment variable (initial / fallback)
+    const settingsDoc = await adminDb.collection('settings').doc('config').get().catch(() => null)
+    const firestorePassword: string | undefined = settingsDoc?.data()?.adminPassword
+    const adminPassword = firestorePassword || process.env.ADMIN_PASSWORD
+
     if (!adminPassword) {
       return NextResponse.json({ success: false, error: '伺服器設定錯誤' }, { status: 500 })
     }

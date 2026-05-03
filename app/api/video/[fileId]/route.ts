@@ -2,20 +2,26 @@ import { NextRequest } from 'next/server'
 import { getAuth } from '@/lib/google-drive'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
 
 /**
  * GET /api/video/[fileId]
  *
- * Proxies a Google Drive video through our server so the browser can use
- * <video autoplay muted src="/api/video/{fileId}"> without hitting:
- *   - CORS restrictions
- *   - Google's virus-scan redirect page (blocks <video> src for large files)
+ * Returns a 302 redirect to the Google Drive media URL so the browser
+ * streams the video directly from Google's CDN.
  *
- * Supports byte-range requests so browsers can seek and buffer efficiently.
+ * Why redirect instead of proxy?
+ *   Proxying a video stream through a Vercel serverless function hits the
+ *   10-second execution limit (Hobby plan), causing the stream to be cut
+ *   mid-playback and the video to freeze on the last buffered frame.
+ *   With a redirect, Vercel only generates the auth token (<1 s), then the
+ *   browser handles the rest — no timeout, no streaming overhead.
+ *
+ * The access_token in the redirect URL expires in ~1 hour; subsequent
+ * byte-range requests for seeking go directly to googleapis.com and reuse
+ * the same token URL.
  */
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ fileId: string }> }
 ) {
   const { fileId } = await params
@@ -26,39 +32,16 @@ export async function GET(
     const token = await auth.getAccessToken()
     if (!token) return new Response('Auth failed', { status: 500 })
 
-    const range = req.headers.get('range')
+    // Build the authenticated media URL and redirect the browser there.
+    // The <video> element streams directly from Google — no Vercel I/O involved.
+    const mediaUrl = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}`)
+    mediaUrl.searchParams.set('alt', 'media')
+    mediaUrl.searchParams.set('supportsAllDrives', 'true')
+    mediaUrl.searchParams.set('access_token', token)
 
-    const driveRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          ...(range ? { Range: range } : {}),
-        },
-      }
-    )
-
-    if (!driveRes.ok && driveRes.status !== 206) {
-      return new Response(`Drive error: ${driveRes.status}`, { status: driveRes.status })
-    }
-
-    const resHeaders = new Headers()
-    const contentType = driveRes.headers.get('content-type')
-    const contentLength = driveRes.headers.get('content-length')
-    const contentRange = driveRes.headers.get('content-range')
-
-    if (contentType) resHeaders.set('Content-Type', contentType)
-    if (contentLength) resHeaders.set('Content-Length', contentLength)
-    if (contentRange) resHeaders.set('Content-Range', contentRange)
-    resHeaders.set('Accept-Ranges', 'bytes')
-    resHeaders.set('Cache-Control', 'public, max-age=3600')
-
-    return new Response(driveRes.body, {
-      status: driveRes.status, // 200 or 206 (partial)
-      headers: resHeaders,
-    })
+    return Response.redirect(mediaUrl.toString(), 302)
   } catch (err) {
     console.error('GET /api/video error:', err)
-    return new Response('Video proxy error', { status: 500 })
+    return new Response('Video redirect error', { status: 500 })
   }
 }
