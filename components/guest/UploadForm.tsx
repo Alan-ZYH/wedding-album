@@ -11,7 +11,80 @@ interface FileWithPreview {
   file: File
   preview: string
   type: 'image' | 'video'
-  error?: string
+}
+
+// ── FFmpeg singleton ─────────────────────────────────────────────────────────
+// Loaded lazily on first .mov upload. The WASM (~30 MB) is fetched from CDN
+// and cached by the browser — subsequent conversions start instantly.
+
+type FFmpegInstance = import('@ffmpeg/ffmpeg').FFmpeg
+let _ffmpeg: FFmpegInstance | null = null
+let _ffmpegLoading: Promise<FFmpegInstance> | null = null
+
+async function getFFmpeg(): Promise<FFmpegInstance> {
+  if (_ffmpeg) return _ffmpeg
+  if (_ffmpegLoading) return _ffmpegLoading
+
+  _ffmpegLoading = (async () => {
+    const { FFmpeg } = await import('@ffmpeg/ffmpeg')
+    const { toBlobURL } = await import('@ffmpeg/util')
+    const instance = new FFmpeg()
+    const base = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd'
+    await instance.load({
+      coreURL:  await toBlobURL(`${base}/ffmpeg-core.js`,   'text/javascript'),
+      wasmURL:  await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+    })
+    _ffmpeg = instance
+    return instance
+  })()
+
+  return _ffmpegLoading
+}
+
+/**
+ * Convert a .mov file to H.264 MP4 using FFmpeg WASM (runs entirely in browser).
+ * onProgress receives 0–100.
+ */
+async function convertMovToMp4(
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<File> {
+  const { fetchFile } = await import('@ffmpeg/util')
+  const ffmpeg = await getFFmpeg()
+
+  // Attach progress listener
+  const handler = ({ progress }: { progress: number }) =>
+    onProgress(Math.min(99, Math.round(progress * 100)))
+  ffmpeg.on('progress', handler)
+
+  try {
+    await ffmpeg.writeFile('input.mov', await fetchFile(file))
+    await ffmpeg.exec([
+      '-i', 'input.mov',
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',   // fastest encode, acceptable quality for 8 s clips
+      '-crf', '23',
+      '-c:a', 'aac',
+      '-movflags', '+faststart', // metadata first → instant web playback
+      'output.mp4',
+    ])
+    const rawData = await ffmpeg.readFile('output.mp4')
+    // readFile returns Uint8Array<ArrayBufferLike> | string.
+    // .slice() produces Uint8Array<ArrayBuffer> which is accepted by the Blob constructor.
+    const arr = (rawData instanceof Uint8Array
+      ? rawData
+      : new TextEncoder().encode(rawData as string)
+    ).slice()
+    const blob = new Blob([arr], { type: 'video/mp4' })
+    onProgress(100)
+    const newName = file.name.replace(/\.mov$/i, '.mp4')
+    return new File([blob], newName, { type: 'video/mp4' })
+  } finally {
+    ffmpeg.off('progress', handler)
+    // Clean up temp files to free WASM memory
+    ffmpeg.deleteFile('input.mov').catch(() => {})
+    ffmpeg.deleteFile('output.mp4').catch(() => {})
+  }
 }
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
@@ -57,6 +130,11 @@ function checkVideoDuration(file: File): Promise<string | null> {
   })
 }
 
+/** Returns true for .mov / video/quicktime files that should be auto-converted. */
+function isMov(file: File): boolean {
+  return file.type === 'video/quicktime' || file.name.toLowerCase().endsWith('.mov')
+}
+
 export default function UploadForm({ guestId, guestName }: Props) {
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [uploading, setUploading] = useState(false)
@@ -67,6 +145,10 @@ export default function UploadForm({ guestId, guestName }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
+  // FFmpeg conversion state
+  const [converting, setConverting] = useState(false)
+  const [convertProgress, setConvertProgress] = useState(0)
+  const [convertingName, setConvertingName] = useState('')
 
   const addFiles = useCallback(async (newFiles: File[]) => {
     const combined = [...files]
@@ -85,14 +167,34 @@ export default function UploadForm({ guestId, guestName }: Props) {
       const isVideo = ALLOWED_VIDEO_TYPES.includes(f.type) ||
                       !!f.name.toLowerCase().match(/\.(mp4|mov)$/)
 
+      // Auto-convert .mov → MP4 before duration check (HEVC codec fix)
+      let fileToAdd = f
+      if (isVideo && isMov(f)) {
+        setConverting(true)
+        setConvertingName(f.name)
+        setConvertProgress(0)
+        try {
+          fileToAdd = await convertMovToMp4(f, setConvertProgress)
+        } catch (e) {
+          console.error('FFmpeg conversion failed:', e)
+          errs.push(`${f.name}：自動轉檔失敗，請改用 .mp4 格式上傳`)
+          setConverting(false)
+          continue
+        } finally {
+          setConverting(false)
+          setConvertProgress(0)
+          setConvertingName('')
+        }
+      }
+
       // Check video duration (client-side, async)
       if (isVideo) {
-        const durationErr = await checkVideoDuration(f)
+        const durationErr = await checkVideoDuration(fileToAdd)
         if (durationErr) { errs.push(durationErr); continue }
       }
 
-      const preview = isImage ? URL.createObjectURL(f) : ''
-      combined.push({ file: f, preview, type: isImage ? 'image' : 'video' })
+      const preview = isImage ? URL.createObjectURL(fileToAdd) : ''
+      combined.push({ file: fileToAdd, preview, type: isImage ? 'image' : 'video' })
     }
 
     setFiles(combined)
@@ -265,8 +367,24 @@ export default function UploadForm({ guestId, guestName }: Props) {
         </div>
       )}
 
+      {/* FFmpeg converting overlay */}
+      {converting && (
+        <div className="mt-4 bg-[#fdf8ef] border border-[#e8d5a3] rounded-2xl p-5 text-center">
+          <div className="text-3xl mb-2 animate-spin">⚙️</div>
+          <p className="text-sm font-medium text-[#7a5c2e] mb-1">正在轉換影片格式…</p>
+          <p className="text-xs text-gray-400 truncate mb-3">{convertingName}</p>
+          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#c9a84c] rounded-full transition-all duration-300"
+              style={{ width: `${convertProgress}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-400 mt-1.5">{convertProgress}%（請稍候，勿關閉頁面）</p>
+        </div>
+      )}
+
       {/* Preview grid */}
-      {files.length > 0 && (
+      {!converting && files.length > 0 && (
         <div className="mt-4">
           <p className="text-xs text-gray-500 mb-2">已選擇 {files.length} 個檔案</p>
           <div className="grid grid-cols-3 gap-2">
@@ -321,9 +439,9 @@ export default function UploadForm({ guestId, guestName }: Props) {
           {/* Upload button */}
           <button
             onClick={handleUpload}
-            disabled={uploading}
+            disabled={uploading || converting}
             className={`mt-4 w-full py-3 rounded-xl font-medium text-sm transition-all ${
-              uploading
+              uploading || converting
                 ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 : 'bg-[#c9a84c] hover:bg-[#b8953d] text-white'
             }`}

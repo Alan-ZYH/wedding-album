@@ -44,7 +44,9 @@ export default function DisplayClient() {
     const unsub = onSnapshot(q, (snap) => {
       const items = snap.docs
         .map((d) => d.data() as Media)
-        .filter((m) => !m.displayError)
+        // displayError only permanently excludes photos (broken Drive URL).
+        // Videos are retried each session with the new public URL approach.
+        .filter((m) => !(m.displayError && m.fileType !== 'video'))
         .filter((m) => !(m.fileType === 'video' && !settings.playVideos))
       setMedia(settings.randomPlayback ? shuffle(items) : items)
       setLoading(false)
@@ -90,6 +92,20 @@ export default function DisplayClient() {
     timerRef.current = setTimeout(goNext, settings.slideInterval * 1000)
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [currentIndex, media, settings.slideInterval, settings.playVideos, goNext])
+
+  // Track videos that failed to play this session (skip without Firestore write)
+  const [sessionSkipped, setSessionSkipped] = useState<Set<string>>(new Set())
+
+  const skipVideo = useCallback((id: string) => {
+    setSessionSkipped((s) => new Set(s).add(id))
+  }, [])
+
+  // Auto-advance when the current item was session-skipped (video error)
+  useEffect(() => {
+    if (sessionSkipped.has(media[currentIndex]?.id)) {
+      goNext()
+    }
+  }, [currentIndex, media, sessionSkipped, goNext])
 
   // Mark a media item as having a display error
   const markDisplayError = useCallback(async (mediaId: string) => {
@@ -152,7 +168,15 @@ export default function DisplayClient() {
               active={true}
               audioAllowed={audioUnlocked}
               onVideoEnd={goNext}
-              onMediaError={() => { markDisplayError(current.id); goNext() }}
+              onMediaError={() => {
+                if (current.fileType === 'video') {
+                  // Videos: skip for this session only, don't permanently mark
+                  skipVideo(current.id); goNext()
+                } else {
+                  // Photos: permanently mark broken URL
+                  markDisplayError(current.id); goNext()
+                }
+              }}
               transition={settings.slideTransition ?? 'fade'}
             />
           )}
@@ -164,7 +188,13 @@ export default function DisplayClient() {
               active={false}
               audioAllowed={audioUnlocked}
               onVideoEnd={goNext}
-              onMediaError={() => { markDisplayError(nextItem.id) }}
+              onMediaError={() => {
+                if (nextItem.fileType === 'video') {
+                  skipVideo(nextItem.id)
+                } else {
+                  markDisplayError(nextItem.id)
+                }
+              }}
               transition={settings.slideTransition ?? 'fade'}
             />
           )}
@@ -250,6 +280,8 @@ function Slide({
   const errorReported = useRef(false)
   // Increment each time this slide becomes active to re-trigger CSS animation
   const [enterKey, setEnterKey] = useState(0)
+  // True when native <video> fails (e.g. HEVC codec) — show thumbnail fallback
+  const [videoLoadError, setVideoLoadError] = useState(false)
 
   useEffect(() => {
     errorReported.current = false
@@ -289,24 +321,25 @@ function Slide({
     v.muted = settings.muteVideos !== false || !audioAllowed
   }, [active, audioAllowed, settings.muteVideos])
 
-  // Safety fallback: advance after 5 minutes if video never ends
+  // Safety fallback: advance after 5 minutes if video never ends normally
   useEffect(() => {
     if (!active || item.fileType !== 'video' || !settings.playVideos) return
+    if (videoLoadError) return  // handled by slideInterval timer below
     const timer = setTimeout(onVideoEnd, 300_000)
     return () => clearTimeout(timer)
-  }, [active, item.id, item.fileType, settings.playVideos, onVideoEnd])
+  }, [active, item.id, item.fileType, settings.playVideos, onVideoEnd, videoLoadError])
+
+  // When video fails to decode (HEVC fallback), auto-advance like a photo
+  useEffect(() => {
+    if (!active || !videoLoadError) return
+    const timer = setTimeout(onVideoEnd, settings.slideInterval * 1000)
+    return () => clearTimeout(timer)
+  }, [active, videoLoadError, settings.slideInterval, onVideoEnd])
 
   // Outer: controls z-order and visibility of the preloading slot
   const outerClass = `absolute inset-0 ${active ? 'z-10' : 'z-0 pointer-events-none opacity-0'}`
   // Inner: re-keyed on each activation to replay the CSS keyframe animation
   const animClass = active ? `transition-${transition}` : ''
-
-  const handleVideoError = () => {
-    if (errorReported.current) return
-    errorReported.current = true
-    onMediaError()
-    if (active) onVideoEnd()
-  }
 
   const handlePhotoError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.target as HTMLImageElement
@@ -319,18 +352,40 @@ function Slide({
   }
 
   if (item.fileType === 'video' && settings.playVideos) {
+    // lh3.googleusercontent.com/d/<fileId> is the same Google CDN used for photos.
+    // It supports Range requests (needed for video seeking/buffering), requires no
+    // authentication (file is set to reader/anyone at upload time), and avoids both
+    // the Vercel 10-second proxy timeout and the deprecated access_token URL param.
+    const videoSrc = `https://lh3.googleusercontent.com/d/${item.googleDriveFileId}`
     return (
       <div className={outerClass}>
         <div key={enterKey} className={`absolute inset-0 flex items-center justify-center bg-black ${animClass}`}>
-          <video
-            ref={videoRef}
-            src={`/api/video/${item.googleDriveFileId}`}
-            playsInline
-            preload="auto"
-            onEnded={onVideoEnd}
-            onError={handleVideoError}
-            className="w-full h-full object-contain"
-          />
+          {videoLoadError ? (
+            // Fallback: show thumbnail + codec notice, auto-advance via slideInterval timer
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`https://drive.google.com/thumbnail?id=${item.googleDriveFileId}&sz=w1920`}
+                alt={item.fileName}
+                className="max-w-full max-h-full object-contain opacity-40"
+              />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                <span className="text-5xl">🎬</span>
+                <p className="text-white/70 text-sm">影片格式不相容（HEVC）</p>
+                <p className="text-white/40 text-xs">請以 Safari 開啟投放頁面以播放此影片</p>
+              </div>
+            </>
+          ) : (
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              playsInline
+              preload={active ? 'auto' : 'none'}
+              onEnded={onVideoEnd}
+              onError={() => setVideoLoadError(true)}
+              className="w-full h-full object-contain"
+            />
+          )}
           {settings.showGuestName && active && <GuestNameBadge name={item.guestName} />}
         </div>
       </div>

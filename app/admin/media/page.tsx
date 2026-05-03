@@ -187,6 +187,7 @@ function MediaPageContent() {
                 onApprove={() => updateMedia(item.id, { approved: !item.approved })}
                 onHide={() => updateMedia(item.id, { status: item.status === 'hidden' ? 'active' : 'hidden' })}
                 onDelete={() => deleteMedia(item.id)}
+                onClearError={() => updateMedia(item.id, { displayError: false })}
               />
             ))}
           </div>
@@ -305,6 +306,7 @@ function MediaCard({
   onApprove,
   onHide,
   onDelete,
+  onClearError,
 }: {
   item: Media
   selected: boolean
@@ -314,6 +316,7 @@ function MediaCard({
   onApprove: () => void
   onHide: () => void
   onDelete: () => void
+  onClearError: () => void
 }) {
   return (
     <div className={`relative bg-white rounded-xl border-2 transition-colors overflow-hidden ${
@@ -383,6 +386,15 @@ function MediaCard({
           >
             {item.status === 'hidden' ? '顯示' : '隱藏'}
           </button>
+          {item.displayError && (
+            <button
+              onClick={onClearError}
+              title="清除投放異常，重新加入輪播"
+              className="text-xs px-2 py-1 rounded-lg bg-orange-50 text-orange-500 hover:bg-orange-100 transition-colors"
+            >
+              🔄
+            </button>
+          )}
           <button
             onClick={onDelete}
             className="text-xs px-2 py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
