@@ -352,11 +352,9 @@ function Slide({
   }
 
   if (item.fileType === 'video' && settings.playVideos) {
-    // lh3.googleusercontent.com/d/<fileId> is the same Google CDN used for photos.
-    // It supports Range requests (needed for video seeking/buffering), requires no
-    // authentication (file is set to reader/anyone at upload time), and avoids both
-    // the Vercel 10-second proxy timeout and the deprecated access_token URL param.
-    const videoSrc = `https://lh3.googleusercontent.com/d/${item.googleDriveFileId}`
+    // Use our short-lived redirect endpoint for videos. Direct lh3 links are
+    // reliable for photos but not consistently playable as video streams.
+    const videoSrc = `/api/video/${item.googleDriveFileId}`
     return (
       <div className={outerClass}>
         <div key={enterKey} className={`absolute inset-0 flex items-center justify-center bg-black ${animClass}`}>

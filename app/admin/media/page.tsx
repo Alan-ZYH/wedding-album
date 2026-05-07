@@ -217,12 +217,11 @@ function MediaPageContent() {
                 }}
               />
             ) : (
-              <iframe
-                src={`https://drive.google.com/file/d/${preview.googleDriveFileId}/preview`}
-                allow="autoplay; fullscreen"
-                allowFullScreen
-                className="w-full rounded-xl mx-auto block"
-                style={{ height: '60vh', border: 'none' }}
+              <video
+                src={`/api/video/${preview.googleDriveFileId}`}
+                controls
+                playsInline
+                className="max-w-full max-h-[65vh] object-contain rounded-xl mx-auto block"
               />
             )}
 

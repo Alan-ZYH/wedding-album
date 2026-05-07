@@ -152,7 +152,7 @@ export default function MyUploads({ guestId }: Props) {
               />
             ) : (
               <video
-                src={`https://lh3.googleusercontent.com/d/${preview.googleDriveFileId}`}
+                src={`/api/video/${preview.googleDriveFileId}`}
                 controls
                 className="max-w-full max-h-[80vh] rounded-lg"
               />
