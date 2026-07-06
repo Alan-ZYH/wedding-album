@@ -1,13 +1,25 @@
+import { cookies } from 'next/headers'
 import { NextRequest } from 'next/server'
 
+const ADMIN_COOKIE = 'admin_session'
+
 /**
- * Admin authentication has been removed by design — the admin panel is
- * protected only by URL secrecy (only the couple knows the /admin URL).
+ * Admin authentication uses the URL-secrecy model — there is no password.
  *
- * The function signature is kept so the ~10 API routes that call it
- * don't need to change. It now always grants access.
+ * The middleware grants an `admin_session` cookie to anyone who visits an
+ * /admin page. Admin-only API routes call this to check for that cookie,
+ * so guests who only ever received the /guest link cannot perform admin
+ * actions (delete others' media, change settings, …) even by calling the
+ * API directly.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function isAdminAuthenticated(_req?: NextRequest): Promise<boolean> {
-  return true
+export async function isAdminAuthenticated(req?: NextRequest): Promise<boolean> {
+  try {
+    if (req) {
+      return req.cookies.get(ADMIN_COOKIE)?.value === '1'
+    }
+    const cookieStore = await cookies()
+    return cookieStore.get(ADMIN_COOKIE)?.value === '1'
+  } catch {
+    return false
+  }
 }
