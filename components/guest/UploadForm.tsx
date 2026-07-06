@@ -5,6 +5,7 @@ import { useState, useRef, useCallback } from 'react'
 interface Props {
   guestId: string
   guestName: string
+  onViewUploads?: () => void
 }
 
 interface FileWithPreview {
@@ -115,17 +116,27 @@ function checkVideoDuration(file: File): Promise<string | null> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file)
     const video = document.createElement('video')
+    let settled = false
+    const finish = (result: string | null) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      URL.revokeObjectURL(url)
+      resolve(result)
+    }
+    // Safety net: if metadata never loads (stalled/corrupt file), don't leak
+    // the object URL — allow the file through after 10s
+    const timeout = setTimeout(() => finish(null), 10_000)
     video.preload = 'metadata'
     video.onloadedmetadata = () => {
-      URL.revokeObjectURL(url)
       // Allow up to 8.9 s to cover iOS encoding overhead on 8-second clips
       if (video.duration > 8.9) {
-        resolve(`${file.name}：影片超過 ${MAX_VIDEO_DURATION} 秒（目前 ${Math.round(video.duration)} 秒）`)
+        finish(`${file.name}：影片超過 ${MAX_VIDEO_DURATION} 秒（目前 ${Math.round(video.duration)} 秒）`)
       } else {
-        resolve(null)
+        finish(null)
       }
     }
-    video.onerror = () => { URL.revokeObjectURL(url); resolve(null) } // allow if can't read
+    video.onerror = () => finish(null) // allow if can't read
     video.src = url
   })
 }
@@ -135,7 +146,7 @@ function isMov(file: File): boolean {
   return file.type === 'video/quicktime' || file.name.toLowerCase().endsWith('.mov')
 }
 
-export default function UploadForm({ guestId, guestName }: Props) {
+export default function UploadForm({ guestId, guestName, onViewUploads }: Props) {
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -313,12 +324,22 @@ export default function UploadForm({ guestId, guestName }: Props) {
         <div className="text-5xl mb-4">🎉</div>
         <h2 className="text-xl font-serif text-[#7a5c2e] mb-2">上傳成功！</h2>
         <p className="text-sm text-gray-500 mb-6">已上傳 {successCount} 個檔案，感謝您的分享</p>
-        <button
-          onClick={() => { setDone(false); setSuccessCount(0); setProgress(0) }}
-          className="bg-[#c9a84c] hover:bg-[#b8953d] text-white px-6 py-2.5 rounded-xl text-sm font-medium transition-colors"
-        >
-          繼續上傳
-        </button>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={() => { setDone(false); setSuccessCount(0); setProgress(0) }}
+            className="bg-[#c9a84c] hover:bg-[#b8953d] text-white px-6 py-2.5 rounded-xl text-sm font-medium transition-colors"
+          >
+            繼續上傳
+          </button>
+          {onViewUploads && (
+            <button
+              onClick={onViewUploads}
+              className="bg-white border border-[#c9a84c] text-[#7a5c2e] hover:bg-[#c9a84c]/10 px-6 py-2.5 rounded-xl text-sm font-medium transition-colors"
+            >
+              查看我的上傳
+            </button>
+          )}
+        </div>
       </div>
     )
   }

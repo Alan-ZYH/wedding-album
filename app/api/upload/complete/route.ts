@@ -41,10 +41,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少必要資訊' }, { status: 400 })
     }
 
-    // Find the file in Drive by its exact name (retry up to 5× with 1s delay each)
+    // Find the file in Drive by its exact name.
+    // Keep total retry time well under Vercel Hobby's 10s limit:
+    // 4 attempts with 700ms gaps ≈ 2.1s sleep + query time.
     let googleDriveFileId: string | null = null
-    for (let attempt = 0; attempt < 5; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 1000))
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 700))
       googleDriveFileId = await findFileByName(fileName)
       if (googleDriveFileId) break
     }

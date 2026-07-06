@@ -30,11 +30,18 @@ const COLORS = [
   '#e8d5a3',
 ]
 
+const MAX_ACTIVE_DANMAKU = 60
+
 export default function DanmakuLayer({ messages, speed, density, fontSize, danmakuStyle }: Props) {
   const [active, setActive] = useState<DanmakuItem[]>([])
   const poolRef = useRef<Message[]>([])
   const channelsRef = useRef<number[]>([]) // track occupied y positions
+  const activeCountRef = useRef(0) // mirrors active.length for use inside timers
   const numChannels = 8
+
+  useEffect(() => {
+    activeCountRef.current = active.length
+  }, [active.length])
 
   useEffect(() => {
     if (messages.length === 0) return
@@ -65,6 +72,9 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
 
     const fire = () => {
       if (poolRef.current.length === 0) return
+      // Cap concurrent danmaku DOM nodes — protects the display device
+      // during long events with many messages
+      if (activeCountRef.current >= MAX_ACTIVE_DANMAKU) return
 
       const msg = poolRef.current[poolIndex % poolRef.current.length]
       poolIndex++

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Media } from '@/types'
 
@@ -20,7 +20,8 @@ export default function MyUploads({ guestId }: Props) {
     if (!db) return
     const q = query(
       collection(db, 'media'),
-      where('guestId', '==', guestId)
+      where('guestId', '==', guestId),
+      limit(100)
     )
     const unsub = onSnapshot(
       q,

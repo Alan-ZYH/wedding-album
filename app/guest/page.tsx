@@ -111,7 +111,11 @@ export default function GuestPage() {
       {/* Content */}
       <main className="max-w-lg mx-auto px-4 py-6">
         {activeTab === 'upload' && (
-          <UploadForm guestId={guest.guestId} guestName={guest.guestName} />
+          <UploadForm
+            guestId={guest.guestId}
+            guestName={guest.guestName}
+            onViewUploads={() => setActiveTab('myUploads')}
+          />
         )}
         {activeTab === 'message' && (
           <MessageForm guestId={guest.guestId} guestName={guest.guestName} />

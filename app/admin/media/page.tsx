@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore'
+import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Media } from '@/types'
+
+const PAGE_SIZE = 60 // cards rendered at a time; "load more" reveals the next batch
 
 function MediaPageContent() {
   const searchParams = useSearchParams()
@@ -19,17 +21,23 @@ function MediaPageContent() {
   })
   const [preview, setPreview] = useState<Media | null>(null)
   const [processing, setProcessing] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   // Real-time listener — updates instantly when guests upload
   useEffect(() => {
     if (!db) return
-    const q = query(collection(db, 'media'), orderBy('uploadTime', 'desc'))
+    const q = query(collection(db, 'media'), orderBy('uploadTime', 'desc'), limit(1000))
     const unsub = onSnapshot(q, (snap) => {
       setMedia(snap.docs.map((d) => d.data() as Media))
       setLoading(false)
     }, () => { setLoading(false) })
     return () => unsub()
   }, [])
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [filter.type, filter.pending, filter.search])
 
   const filtered = media.filter((m) => {
     if (m.status === 'deleted') return false
@@ -84,24 +92,53 @@ function MediaPageContent() {
     finally { setProcessing(null) }
   }
 
-  const batchApprove = async () => {
-    for (const id of selected) {
-      await updateMedia(id, { approved: true })
+  // Run async operations over ids with bounded concurrency (10 at a time)
+  const runBatch = async (ids: string[], op: (id: string) => Promise<void>) => {
+    const CONCURRENCY = 10
+    for (let i = 0; i < ids.length; i += CONCURRENCY) {
+      await Promise.all(ids.slice(i, i + CONCURRENCY).map(op))
     }
-    setSelected(new Set())
   }
 
-  const batchHide = async () => {
-    for (const id of selected) {
-      await updateMedia(id, { status: 'hidden' })
+  const batchUpdate = async (updates: Record<string, unknown>) => {
+    const ids = [...selected]
+    setProcessing('batch')
+    try {
+      await runBatch(ids, async (id) => {
+        const res = await fetch(`/api/media/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        })
+        if ((await res.json()).success) {
+          setMedia((prev) => prev.map((m) => m.id === id ? { ...m, ...updates } as Media : m))
+        }
+      })
+    } catch {}
+    finally {
+      setProcessing(null)
+      setSelected(new Set())
     }
-    setSelected(new Set())
   }
+
+  const batchApprove = () => batchUpdate({ approved: true })
+  const batchHide = () => batchUpdate({ status: 'hidden' })
 
   const batchDelete = async () => {
-    if (!confirm(`確定永久刪除 ${selected.size} 個檔案？`)) return
-    for (const id of selected) {
-      await deleteMedia(id)
+    if (!confirm(`確定永久刪除 ${selected.size} 個檔案？此操作也會刪除 Google Drive 中的檔案。`)) return
+    const ids = [...selected]
+    setProcessing('batch')
+    try {
+      await runBatch(ids, async (id) => {
+        const res = await fetch(`/api/media/${id}`, { method: 'DELETE' })
+        if ((await res.json()).success) {
+          setMedia((prev) => prev.filter((m) => m.id !== id))
+        }
+      })
+    } catch {}
+    finally {
+      setProcessing(null)
+      setSelected(new Set())
     }
   }
 
@@ -176,12 +213,12 @@ function MediaPageContent() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {filtered.map((item) => (
+            {filtered.slice(0, visibleCount).map((item) => (
               <MediaCard
                 key={item.id}
                 item={item}
                 selected={selected.has(item.id)}
-                processing={processing === item.id}
+                processing={processing === item.id || processing === 'batch'}
                 onSelect={() => toggleSelect(item.id)}
                 onPreview={() => setPreview(item)}
                 onApprove={() => updateMedia(item.id, { approved: !item.approved })}
@@ -191,6 +228,18 @@ function MediaPageContent() {
               />
             ))}
           </div>
+
+          {/* Load more — keeps DOM light with hundreds of items */}
+          {filtered.length > visibleCount && (
+            <div className="text-center mt-6">
+              <button
+                onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                className="px-6 py-2.5 rounded-xl text-sm bg-white border border-gray-300 text-gray-600 hover:border-[#c9a84c] hover:text-[#7a5c2e] transition-colors"
+              >
+                載入更多（還有 {filtered.length - visibleCount} 個）
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -336,11 +385,23 @@ function MediaCard({
           <img
             src={item.thumbnailUrl}
             alt={item.guestName}
+            loading="lazy"
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gray-800 text-3xl">
-            🎬
+          <div className="w-full h-full relative bg-gray-800">
+            {/* Drive generates video thumbnails; fall back to the clapper icon */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={item.thumbnailUrl}
+              alt={item.guestName}
+              loading="lazy"
+              className="w-full h-full object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-3xl drop-shadow-lg">▶️</span>
+            </div>
           </div>
         )}
         {item.status === 'hidden' && (

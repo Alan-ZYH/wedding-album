@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { collection, doc, onSnapshot, query, where, orderBy } from 'firebase/firestore'
+import { collection, doc, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Media, Message, Settings, DEFAULT_SETTINGS } from '@/types'
 import DanmakuLayer from '@/components/display/DanmakuLayer'
@@ -18,6 +18,9 @@ export default function DisplayClient() {
   const [audioUnlocked, setAudioUnlocked] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Stable random order: remembers the shuffled position of each media id so
+  // new uploads are appended at the end instead of reshuffling mid-show.
+  const shuffledOrderRef = useRef<Map<string, number>>(new Map())
 
   // Real-time settings via Firestore onSnapshot
   useEffect(() => {
@@ -39,7 +42,8 @@ export default function DisplayClient() {
       collection(db, 'media'),
       where('status', '==', 'active'),
       where('approved', '==', true),
-      orderBy('uploadTime', 'asc')
+      orderBy('uploadTime', 'asc'),
+      limit(800)
     )
     const unsub = onSnapshot(q, (snap) => {
       const items = snap.docs
@@ -48,7 +52,21 @@ export default function DisplayClient() {
         // Videos are retried each session with the new public URL approach.
         .filter((m) => !(m.displayError && m.fileType !== 'video'))
         .filter((m) => !(m.fileType === 'video' && !settings.playVideos))
-      setMedia(settings.randomPlayback ? shuffle(items) : items)
+
+      let ordered = items
+      if (settings.randomPlayback) {
+        // Assign a stable random sort key to each new id; existing ids keep
+        // their position so the running slideshow never reshuffles.
+        const order = shuffledOrderRef.current
+        for (const m of items) {
+          if (!order.has(m.id)) order.set(m.id, order.size + Math.random())
+        }
+        ordered = [...items].sort((a, b) => order.get(a.id)! - order.get(b.id)!)
+      }
+
+      setMedia(ordered)
+      // Clamp index if the list shrank (admin hid/deleted items)
+      setCurrentIndex((idx) => (idx >= ordered.length ? 0 : idx))
       setLoading(false)
     })
     return () => unsub()
@@ -60,7 +78,8 @@ export default function DisplayClient() {
     const q = query(
       collection(db, 'messages'),
       where('status', '==', 'active'),
-      orderBy('createdAt', 'asc')
+      orderBy('createdAt', 'asc'),
+      limit(500)
     )
     const unsub = onSnapshot(q, (snap) => {
       setMessages(snap.docs.map((d) => d.data() as Message))
@@ -138,6 +157,17 @@ export default function DisplayClient() {
   const current = media[currentIndex]
   const nextIndex = media.length > 1 ? (currentIndex + 1) % media.length : -1
   const nextItem = nextIndex >= 0 ? media[nextIndex] : null
+
+  // Preload the photo after next with a detached Image object so fast
+  // slide intervals (2-3s) never show a blank frame
+  useEffect(() => {
+    if (media.length < 3) return
+    const nextNext = media[(currentIndex + 2) % media.length]
+    if (nextNext && nextNext.fileType === 'photo') {
+      const img = new Image()
+      img.src = `https://lh3.googleusercontent.com/d/${nextNext.googleDriveFileId}=w1920`
+    }
+  }, [currentIndex, media])
 
   // Show audio hint when: admin wants sound, user hasn't clicked yet, a video is playing
   const showAudioHint = !settings.muteVideos && !audioUnlocked && current?.fileType === 'video' && settings.playVideos
@@ -241,7 +271,7 @@ export default function DisplayClient() {
         </button>
       </div>
 
-      {media.length > 1 && (
+      {media.length > 1 && media.length <= 30 && (
         <div className="absolute bottom-0 left-0 right-0 flex gap-0.5 px-4 pb-3 opacity-30 hover:opacity-70 transition-opacity z-30">
           {media.map((_, i) => (
             <div
@@ -252,6 +282,18 @@ export default function DisplayClient() {
               }`}
             />
           ))}
+        </div>
+      )}
+      {media.length > 30 && (
+        // Single progress bar for large collections — avoids rendering
+        // hundreds of DOM nodes on the display device
+        <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 opacity-30 hover:opacity-70 transition-opacity z-30">
+          <div className="h-0.5 bg-white/20 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#c9a84c] rounded-full transition-all duration-500"
+              style={{ width: `${((currentIndex + 1) / media.length) * 100}%` }}
+            />
+          </div>
         </div>
       )}
     </div>
@@ -432,11 +474,3 @@ function WaitingScreen({ albumName }: { albumName: string }) {
   )
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
-}

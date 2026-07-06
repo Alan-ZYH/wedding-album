@@ -29,17 +29,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: '未授權存取' }, { status: 401 })
   }
 
-  // Rate limit
-  if (!checkRateLimit(req, parseInt(process.env.RATE_LIMIT_MAX || '10'))) {
-    return NextResponse.json({ success: false, error: '上傳過於頻繁，請稍後再試' }, { status: 429 })
-  }
-
   try {
     const body = await req.json()
     const { guestId, guestNameRaw, mimeType, fileSize, originalName } = body
 
     if (!guestId || !guestNameRaw) {
       return NextResponse.json({ success: false, error: '缺少賓客資訊' }, { status: 400 })
+    }
+
+    // Rate limit keyed by ip+guestId so guests on the same venue WiFi
+    // don't consume each other's quota
+    if (!checkRateLimit(req, parseInt(process.env.RATE_LIMIT_MAX || '10'), guestId)) {
+      return NextResponse.json({ success: false, error: '上傳過於頻繁，請稍後再試' }, { status: 429 })
     }
 
     const guestName = sanitizeName(guestNameRaw)

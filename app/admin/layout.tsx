@@ -1,37 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter()
   const pathname = usePathname()
-  const [checking, setChecking] = useState(true)
-
-  useEffect(() => {
-    // Skip auth check on login page
-    if (pathname === '/admin/login') {
-      setChecking(false)
-      return
-    }
-
-    fetch('/api/auth/verify')
-      .then((r) => {
-        if (!r.ok) router.replace('/admin/login')
-        else setChecking(false)
-      })
-      .catch(() => router.replace('/admin/login'))
-  }, [pathname, router])
-
-  if (pathname === '/admin/login') return <>{children}</>
-  if (checking) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-400 text-sm">驗證中...</p>
-      </div>
-    )
-  }
 
   const navItems = [
     { href: '/admin/dashboard', label: '概覽', icon: '📊' },
@@ -39,11 +12,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/messages', label: '祝福', icon: '💌' },
     { href: '/admin/settings', label: '設定', icon: '⚙️' },
   ]
-
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/admin/login')
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -72,7 +40,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </nav>
 
         <div className="px-4 py-4 border-t border-gray-200">
-          <div className="flex gap-2 mb-3">
+          <div className="flex gap-2">
             <Link
               href="/guest"
               target="_blank"
@@ -88,12 +56,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               投放端
             </Link>
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-full text-xs text-gray-500 hover:text-red-500 py-1.5 transition-colors"
-          >
-            登出
-          </button>
         </div>
       </aside>
 
