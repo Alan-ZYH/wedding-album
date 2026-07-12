@@ -139,6 +139,8 @@ async function backupMedia() {
 }
 
 // ── NAS 同步 ─────────────────────────────────────────────────────
+// 用 tar over SSH 而非 rsync：Synology 預設未啟用 rsync 服務，
+// tar 只需要 SSH 即可，且 COPYFILE_DISABLE 避免 macOS ._ 檔汙染
 function syncToNas() {
   console.log(`🖥  同步到 NAS（${NAS_HOST}）...`)
   try {
@@ -148,8 +150,8 @@ function syncToNas() {
     process.exit(1)
   }
   execSync(
-    `COPYFILE_DISABLE=1 rsync -av --exclude='.DS_Store' "${BACKUP_DIR}/" ${NAS_HOST}:${NAS_DEST}`,
-    { stdio: 'inherit' }
+    `COPYFILE_DISABLE=1 tar -C "${BACKUP_DIR}" -cf - --exclude '.DS_Store' . | ssh ${NAS_HOST} "tar -C ${NAS_DEST} -xf -"`,
+    { stdio: 'inherit', shell: '/bin/zsh' }
   )
   console.log('✅ NAS 同步完成')
 }
