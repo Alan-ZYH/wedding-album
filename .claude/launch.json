@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "start"],
       "port": 3000
+    },
+    {
+      "name": "alan-fitness-hub",
+      "runtimeExecutable": "/Users/alanz/Documents/AI健身app/.venv/bin/python3",
+      "runtimeArgs": ["/Users/alanz/Documents/AI健身app/health_app_complete/fitness_app_server/run.py"],
+      "port": 8000
     }
   ]
 }

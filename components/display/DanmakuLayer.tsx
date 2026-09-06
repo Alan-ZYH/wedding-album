@@ -60,8 +60,12 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
     poolRef.current = pool
   }, [messages])
 
+  // The spawn loop reads poolRef, so it does NOT depend on `messages` itself —
+  // otherwise every new blessing would tear down and restart the interval,
+  // delaying the next danmaku each time guests post in quick succession.
+  const hasMessages = messages.length > 0
   useEffect(() => {
-    if (messages.length === 0) return
+    if (!hasMessages) return
 
     // density: 1=sparse, 5=dense → interval in ms
     // speed: 1=slow(12s), 5=fast(5s)
@@ -119,7 +123,7 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
     setTimeout(fire, 500)
 
     return () => clearInterval(interval)
-  }, [messages, speed, density])
+  }, [hasMessages, speed, density, danmakuStyle])
 
   return (
     <div className="danmaku-container pointer-events-none">

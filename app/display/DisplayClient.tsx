@@ -102,15 +102,24 @@ export default function DisplayClient() {
     setCurrentIndex((prev) => (prev - 1 + media.length) % Math.max(media.length, 1))
   }
 
-  // Auto-advance timer for photos
+  // Keep goNext reachable from timers without making it a dependency
+  const goNextRef = useRef(goNext)
+  useEffect(() => { goNextRef.current = goNext }, [goNext])
+
+  // Auto-advance timer for photos.
+  // Depends on the CURRENT ITEM's identity, not the whole media array — a guest
+  // uploading mid-slide must not restart the countdown. With `media` as a
+  // dependency, frequent uploads (peak reception) reset the timer faster than it
+  // expires and the slideshow freezes on one photo.
+  const currentSlideId = media[currentIndex]?.id
+  const currentSlideIsVideo = media[currentIndex]?.fileType === 'video'
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
-    const current = media[currentIndex]
-    if (!current) return
-    if (current.fileType === 'video' && settings.playVideos) return
-    timerRef.current = setTimeout(goNext, settings.slideInterval * 1000)
+    if (!currentSlideId) return
+    if (currentSlideIsVideo && settings.playVideos) return
+    timerRef.current = setTimeout(() => goNextRef.current(), settings.slideInterval * 1000)
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [currentIndex, media, settings.slideInterval, settings.playVideos, goNext])
+  }, [currentSlideId, currentSlideIsVideo, settings.slideInterval, settings.playVideos])
 
   // Track videos that failed to play this session (skip without Firestore write)
   const [sessionSkipped, setSessionSkipped] = useState<Set<string>>(new Set())
@@ -119,12 +128,13 @@ export default function DisplayClient() {
     setSessionSkipped((s) => new Set(s).add(id))
   }, [])
 
-  // Auto-advance when the current item was session-skipped (video error)
+  // Auto-advance when the current item was session-skipped (video error).
+  // Keyed on the current item's id so incoming uploads don't re-trigger it.
   useEffect(() => {
-    if (sessionSkipped.has(media[currentIndex]?.id)) {
-      goNext()
+    if (currentSlideId && sessionSkipped.has(currentSlideId)) {
+      goNextRef.current()
     }
-  }, [currentIndex, media, sessionSkipped, goNext])
+  }, [currentSlideId, sessionSkipped])
 
   // Mark a media item as having a display error
   const markDisplayError = useCallback(async (mediaId: string) => {
