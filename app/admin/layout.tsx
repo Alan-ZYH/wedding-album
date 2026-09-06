@@ -10,6 +10,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/dashboard', label: '概覽', icon: '📊' },
     { href: '/admin/media', label: '媒體', icon: '🖼️' },
     { href: '/admin/messages', label: '祝福', icon: '💌' },
+    { href: '/admin/guests', label: '賓客', icon: '👥' },
     { href: '/admin/settings', label: '設定', icon: '⚙️' },
   ]
 

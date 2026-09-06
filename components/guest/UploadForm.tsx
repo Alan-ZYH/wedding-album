@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 
 interface Props {
   guestId: string
@@ -93,7 +93,8 @@ const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime']
 const MAX_IMAGE_SIZE = 50 * 1024 * 1024   // 50 MB
 const MAX_VIDEO_SIZE = 500 * 1024 * 1024  // 500 MB (duration enforced separately)
 const MAX_VIDEO_DURATION = 8              // seconds
-const MAX_FILES = 20
+const MAX_FILES = 3
+const COOLDOWN_SECONDS = 30   // wait after each completed batch
 
 function validateFile(file: File): string | null {
   if (ALLOWED_IMAGE_TYPES.includes(file.type)) {
@@ -156,10 +157,19 @@ export default function UploadForm({ guestId, guestName, onViewUploads }: Props)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
+  // Cooldown: seconds left before another batch may be uploaded
+  const [cooldown, setCooldown] = useState(0)
   // FFmpeg conversion state
   const [converting, setConverting] = useState(false)
   const [convertProgress, setConvertProgress] = useState(0)
   const [convertingName, setConvertingName] = useState('')
+
+  // Tick the cooldown down to zero
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [cooldown])
 
   const addFiles = useCallback(async (newFiles: File[]) => {
     const combined = [...files]
@@ -259,7 +269,10 @@ export default function UploadForm({ guestId, guestName, onViewUploads }: Props)
         })
         const initData = await initRes.json()
         if (!initData.success) {
+          // Server is the source of truth for the cooldown / block state
+          if (typeof initData.remaining === 'number') setCooldown(initData.remaining)
           errs.push(initData.error || `${file.name}：初始化失敗`)
+          if (initData.reason === 'blocked' || initData.reason === 'cooldown') break
           continue
         }
         const { uploadUrl, mediaId, fileName } = initData
@@ -314,6 +327,7 @@ export default function UploadForm({ guestId, guestName, onViewUploads }: Props)
     if (succeeded > 0) {
       setDone(true)
       setFiles([])
+      setCooldown(COOLDOWN_SECONDS) // batch finished → start the wait
     }
     setUploading(false)
   }
@@ -327,9 +341,14 @@ export default function UploadForm({ guestId, guestName, onViewUploads }: Props)
         <div className="flex gap-3 justify-center">
           <button
             onClick={() => { setDone(false); setSuccessCount(0); setProgress(0) }}
-            className="bg-[#c9a84c] hover:bg-[#b8953d] text-white px-6 py-2.5 rounded-xl text-sm font-medium transition-colors"
+            disabled={cooldown > 0}
+            className={`px-6 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+              cooldown > 0
+                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                : 'bg-[#c9a84c] hover:bg-[#b8953d] text-white'
+            }`}
           >
-            繼續上傳
+            {cooldown > 0 ? `請稍候 ${cooldown} 秒` : '繼續上傳'}
           </button>
           {onViewUploads && (
             <button
@@ -354,21 +373,36 @@ export default function UploadForm({ guestId, guestName, onViewUploads }: Props)
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
-          dragging
-            ? 'border-[#c9a84c] bg-[#c9a84c]/10'
-            : 'border-[#e8d5a3] hover:border-[#c9a84c] hover:bg-[#c9a84c]/5'
+        onClick={() => { if (cooldown === 0) fileInputRef.current?.click() }}
+        className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
+          cooldown > 0
+            ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
+            : dragging
+            ? 'border-[#c9a84c] bg-[#c9a84c]/10 cursor-pointer'
+            : 'border-[#e8d5a3] hover:border-[#c9a84c] hover:bg-[#c9a84c]/5 cursor-pointer'
         }`}
       >
-        <div className="text-3xl mb-2">📸</div>
-        <p className="text-sm font-medium text-[#7a5c2e]">點擊或拖曳上傳</p>
-        <p className="text-xs text-gray-400 mt-1">
-          JPG、PNG、WEBP、HEIC、MP4、MOV
-        </p>
-        <p className="text-xs text-gray-400">
-          圖片 ≤ 50MB ｜ 影片 ≤ {MAX_VIDEO_DURATION} 秒 ｜ 最多 {MAX_FILES} 個
-        </p>
+        {cooldown > 0 ? (
+          <>
+            <div className="text-3xl mb-2">⏳</div>
+            <p className="text-sm font-medium text-gray-500">請稍候 {cooldown} 秒</p>
+            <p className="text-xs text-gray-400 mt-1">為了讓每位賓客都有機會分享，上傳後需要間隔一下</p>
+          </>
+        ) : (
+          <>
+            <div className="text-3xl mb-2">📸</div>
+            <p className="text-sm font-medium text-[#7a5c2e]">點擊或拖曳上傳</p>
+            <p className="text-xs text-gray-400 mt-1">
+              JPG、PNG、WEBP、HEIC、MP4、MOV
+            </p>
+            <p className="text-xs text-gray-400">
+              圖片 ≤ 50MB ｜ 影片 ≤ {MAX_VIDEO_DURATION} 秒
+            </p>
+            <p className="text-xs text-[#c9a84c] mt-1.5 font-medium">
+              一次最多 {MAX_FILES} 張，上傳後需等待 {COOLDOWN_SECONDS} 秒
+            </p>
+          </>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -460,14 +494,16 @@ export default function UploadForm({ guestId, guestName, onViewUploads }: Props)
           {/* Upload button */}
           <button
             onClick={handleUpload}
-            disabled={uploading || converting}
+            disabled={uploading || converting || cooldown > 0}
             className={`mt-4 w-full py-3 rounded-xl font-medium text-sm transition-all ${
-              uploading || converting
+              uploading || converting || cooldown > 0
                 ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 : 'bg-[#c9a84c] hover:bg-[#b8953d] text-white'
             }`}
           >
-            {uploading ? '上傳中...' : `上傳 ${files.length} 個檔案`}
+            {uploading ? '上傳中...'
+              : cooldown > 0 ? `請稍候 ${cooldown} 秒`
+              : `上傳 ${files.length} 個檔案`}
           </button>
         </div>
       )}

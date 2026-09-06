@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
-import { isGuestAuthenticated } from '@/lib/guest-auth'
+import { checkGuestGate, gateErrorMessage, recordGuestAction } from '@/lib/guests'
 import { sanitizeText, sanitizeName } from '@/lib/sanitize'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { Message } from '@/types'
@@ -38,10 +38,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Open to anyone with the link; blocking and cooldown are enforced below.
   const isAdmin = await isAdminAuthenticated(req)
-  if (!isAdmin && !isGuestAuthenticated(req)) {
-    return NextResponse.json({ success: false, error: '未授權存取' }, { status: 401 })
-  }
 
   if (!checkRateLimit(req, 20)) {
     return NextResponse.json({ success: false, error: '請求過於頻繁' }, { status: 429 })
@@ -56,6 +54,22 @@ export async function POST(req: NextRequest) {
 
     if (!messageRaw?.trim()) {
       return NextResponse.json({ success: false, error: '祝福內容不可為空' }, { status: 400 })
+    }
+
+    // Block list + 30s cooldown, tracked separately from photo uploads
+    if (!isAdmin && guestId) {
+      const gate = await checkGuestGate(guestId, 'message')
+      if (!gate.ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: gateErrorMessage(gate),
+            reason: gate.reason,
+            remaining: gate.reason === 'cooldown' ? gate.remaining : undefined,
+          },
+          { status: gate.reason === 'blocked' ? 403 : 429 }
+        )
+      }
     }
 
     const message = sanitizeText(messageRaw)
@@ -80,6 +94,12 @@ export async function POST(req: NextRequest) {
     }
 
     await adminDb.collection(COLLECTIONS.MESSAGES).doc(id).set(doc)
+
+    // Only successful posts advance the cooldown window
+    if (!isAdmin && guestId) {
+      await recordGuestAction(guestId, guestName, 'message')
+    }
+
     return NextResponse.json({ success: true, data: doc })
   } catch (err) {
     console.error('POST /api/messages error:', err)

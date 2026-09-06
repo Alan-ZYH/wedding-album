@@ -4,7 +4,7 @@ import { createResumableUploadSession } from '@/lib/google-drive'
 import { validateFile, sanitizeName } from '@/lib/sanitize'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { isAdminAuthenticated } from '@/lib/auth'
-import { isGuestAuthenticated } from '@/lib/guest-auth'
+import { checkGuestGate, gateErrorMessage } from '@/lib/guests'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,11 +23,9 @@ export const dynamic = 'force-dynamic'
  *   originalName   string  (original file name — used for extension only)
  */
 export async function POST(req: NextRequest) {
-  // Auth check
+  // The guest page is open to anyone with the link; the gate below is what
+  // stops blocked guests and enforces the upload cooldown.
   const admin = await isAdminAuthenticated(req)
-  if (!admin && !isGuestAuthenticated(req)) {
-    return NextResponse.json({ success: false, error: '未授權存取' }, { status: 401 })
-  }
 
   try {
     const body = await req.json()
@@ -41,6 +39,22 @@ export async function POST(req: NextRequest) {
     // don't consume each other's quota
     if (!checkRateLimit(req, parseInt(process.env.RATE_LIMIT_MAX || '10'), guestId)) {
       return NextResponse.json({ success: false, error: '上傳過於頻繁，請稍後再試' }, { status: 429 })
+    }
+
+    // Block list + 30s cooldown (admins bypass both)
+    if (!admin) {
+      const gate = await checkGuestGate(guestId, 'photo')
+      if (!gate.ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: gateErrorMessage(gate),
+            reason: gate.reason,
+            remaining: gate.reason === 'cooldown' ? gate.remaining : undefined,
+          },
+          { status: gate.reason === 'blocked' ? 403 : 429 }
+        )
+      }
     }
 
     const guestName = sanitizeName(guestNameRaw)

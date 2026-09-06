@@ -84,11 +84,11 @@ export default function DashboardPage() {
         <div className="space-y-2">
           <CopyUrlRow
             label="賓客端"
-            path={`/guest?token=${process.env.NEXT_PUBLIC_GUEST_TOKEN ?? ''}`}
+            path="/guest"
           />
           <CopyUrlRow
             label="投放端"
-            path={`/display?token=${process.env.NEXT_PUBLIC_DISPLAY_TOKEN ?? ''}`}
+            path="/display"
           />
         </div>
         <p className="text-xs text-gray-400 mt-3">將賓客端連結製成 QR Code 印在婚禮現場；投放端連結僅供工作人員使用</p>

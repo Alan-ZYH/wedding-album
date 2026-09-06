@@ -37,4 +37,5 @@ export const COLLECTIONS = {
   MEDIA: 'media',
   MESSAGES: 'messages',
   SETTINGS: 'settings',
+  GUESTS: 'guests',
 } as const

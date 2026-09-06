@@ -58,9 +58,17 @@ export default function GuestPage() {
     setGuest(info)
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem(GUEST_KEY)
-    setGuest(null)
+  /**
+   * Rename keeps the SAME guestId. Issuing a fresh id here would let a blocked
+   * guest shed their identity in two taps, so the id is deliberately sticky.
+   */
+  const handleRename = () => {
+    if (!guest) return
+    const next = window.prompt('修改顯示名稱', guest.guestName)?.trim()
+    if (!next || next === guest.guestName) return
+    const info: GuestInfo = { guestId: guest.guestId, guestName: next.slice(0, 20) }
+    localStorage.setItem(GUEST_KEY, JSON.stringify(info))
+    setGuest(info)
   }
 
   if (!mounted) return null
@@ -79,10 +87,10 @@ export default function GuestPage() {
             <p className="text-xs text-[#c9a84c]">歡迎，{guest.guestName}</p>
           </div>
           <button
-            onClick={handleLogout}
+            onClick={handleRename}
             className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
           >
-            更換名稱
+            修改名稱
           </button>
         </div>
 

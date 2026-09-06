@@ -16,6 +16,14 @@ export default function MessageForm({ guestId, guestName }: Props) {
   const [myMessages, setMyMessages] = useState<Message[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
+  // Blessings have their own 30s cooldown, independent of photo uploads
+  const [cooldown, setCooldown] = useState(0)
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [cooldown])
 
   const fetchMyMessages = async () => {
     try {
@@ -50,9 +58,12 @@ export default function MessageForm({ guestId, guestName }: Props) {
       if (data.success) {
         setMessage('')
         setSubmitted(true)
+        setCooldown(30)
         await fetchMyMessages()
         setTimeout(() => setSubmitted(false), 3000)
       } else {
+        // Server is the source of truth for cooldown / block state
+        if (typeof data.remaining === 'number') setCooldown(data.remaining)
         setError(data.error || '送出失敗')
       }
     } catch {
@@ -124,14 +135,16 @@ export default function MessageForm({ guestId, guestName }: Props) {
 
         <button
           type="submit"
-          disabled={submitting || !message.trim()}
+          disabled={submitting || !message.trim() || cooldown > 0}
           className={`mt-3 w-full py-3 rounded-xl font-medium text-sm transition-all ${
-            submitting || !message.trim()
+            submitting || !message.trim() || cooldown > 0
               ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
               : 'bg-[#c9a84c] hover:bg-[#b8953d] text-white'
           }`}
         >
-          {submitting ? '送出中...' : '送出祝福 ♡'}
+          {submitting ? '送出中...'
+            : cooldown > 0 ? `請稍候 ${cooldown} 秒`
+            : '送出祝福 ♡'}
         </button>
       </form>
 

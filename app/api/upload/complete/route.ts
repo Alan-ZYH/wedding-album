@@ -3,7 +3,7 @@ import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { findFileByName, setDriveFilePublic, buildThumbnailUrl } from '@/lib/google-drive'
 import { getSettings } from '@/lib/settings'
 import { isAdminAuthenticated } from '@/lib/auth'
-import { isGuestAuthenticated } from '@/lib/guest-auth'
+import { recordGuestAction } from '@/lib/guests'
 import { Media } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -27,11 +27,9 @@ export const maxDuration = 60
  *   fileType   'photo' | 'video'
  */
 export async function POST(req: NextRequest) {
-  // Auth check
+  // Gating happened at /api/upload/init; by this point the bytes are already
+  // in Drive, so we only need to know whether to advance the guest's cooldown.
   const admin = await isAdminAuthenticated(req)
-  if (!admin && !isGuestAuthenticated(req)) {
-    return NextResponse.json({ success: false, error: '未授權存取' }, { status: 401 })
-  }
 
   try {
     const body = await req.json()
@@ -81,9 +79,17 @@ export async function POST(req: NextRequest) {
       uploadTime: now.toISOString(),
       status: 'active',
       approved: !settings.requireApproval,
+      // New uploads always start queued; the display promotes them per rule Y
+      displayState: 'pending',
+      displayStateAt: now.toISOString(),
     }
 
     await adminDb.collection(COLLECTIONS.MEDIA).doc(mediaId).set(media)
+
+    // Only a successful upload advances the cooldown window ("失敗不罰")
+    if (!admin) {
+      await recordGuestAction(guestId, guestName, 'photo')
+    }
 
     return NextResponse.json({ success: true, mediaId })
   } catch (err) {
