@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Media, Message } from '@/types'
+import { Media, Message, DEFAULT_SETTINGS } from '@/types'
+import QrCodePanel from '@/components/admin/QrCodePanel'
 
 function CopyUrlRow({ label, path }: { label: string; path: string }) {
   const [copied, setCopied] = useState(false)
@@ -31,6 +32,14 @@ export default function DashboardPage() {
   const [media, setMedia] = useState<Media[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
+  const [albumName, setAlbumName] = useState(DEFAULT_SETTINGS.albumName)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((d) => { if (d.success && d.data?.albumName) setAlbumName(d.data.albumName) })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -75,6 +84,8 @@ export default function DashboardPage() {
           <p className="text-sm text-gray-400 mt-0.5">Dashboard</p>
         </div>
       </div>
+
+      <QrCodePanel albumName={albumName} />
 
       {/* Access URLs */}
       <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-6">
