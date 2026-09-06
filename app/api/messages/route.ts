@@ -19,16 +19,23 @@ export async function GET(req: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = col
-    if (!isAdmin) {
+    if (isAdmin) {
+      q = q.orderBy('createdAt', 'desc')
+    } else {
+      // Filtered reads are sorted in memory rather than by Firestore: ordering
+      // alongside these equality filters needs a composite index that doesn't
+      // exist, and the query fails outright without one. A few hundred rows
+      // sort fine here.
       q = q.where('status', '==', 'active')
-      if (guestId) {
-        q = q.where('guestId', '==', guestId)
-      }
+      if (guestId) q = q.where('guestId', '==', guestId)
     }
-    q = q.orderBy('createdAt', 'desc').limit(500)
+    q = q.limit(500)
 
     const snapshot = await q.get()
     const messages: Message[] = snapshot.docs.map((doc: { data: () => unknown }) => doc.data() as Message)
+    if (!isAdmin) {
+      messages.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    }
 
     return NextResponse.json({ success: true, data: messages })
   } catch (err) {

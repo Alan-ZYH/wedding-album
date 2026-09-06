@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Message } from '@/types'
 
 interface Props {
   guestId: string
@@ -13,9 +12,6 @@ export default function MessageForm({ guestId, guestName }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
-  const [myMessages, setMyMessages] = useState<Message[]>([])
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editText, setEditText] = useState('')
   // Blessings have their own 30s cooldown, independent of photo uploads
   const [cooldown, setCooldown] = useState(0)
 
@@ -24,20 +20,6 @@ export default function MessageForm({ guestId, guestName }: Props) {
     const t = setTimeout(() => setCooldown((c) => c - 1), 1000)
     return () => clearTimeout(t)
   }, [cooldown])
-
-  const fetchMyMessages = async () => {
-    try {
-      const res = await fetch(`/api/messages?guestId=${guestId}`)
-      const data = await res.json()
-      if (data.success) {
-        setMyMessages(data.data.filter((m: Message) => m.status === 'active'))
-      }
-    } catch {}
-  }
-
-  useEffect(() => {
-    fetchMyMessages()
-  }, [guestId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -59,7 +41,6 @@ export default function MessageForm({ guestId, guestName }: Props) {
         setMessage('')
         setSubmitted(true)
         setCooldown(30)
-        await fetchMyMessages()
         setTimeout(() => setSubmitted(false), 3000)
       } else {
         // Server is the source of truth for cooldown / block state
@@ -71,36 +52,6 @@ export default function MessageForm({ guestId, guestName }: Props) {
     } finally {
       setSubmitting(false)
     }
-  }
-
-  const handleEdit = async (id: string) => {
-    const trimmed = editText.trim()
-    if (!trimmed) return
-    try {
-      const res = await fetch(`/api/messages/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId, message: trimmed }),
-      })
-      if ((await res.json()).success) {
-        setEditingId(null)
-        await fetchMyMessages()
-      }
-    } catch {}
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('確定要刪除這則祝福嗎？')) return
-    try {
-      const res = await fetch(`/api/messages/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId, status: 'deleted' }),
-      })
-      if ((await res.json()).success) {
-        await fetchMyMessages()
-      }
-    } catch {}
   }
 
   return (
