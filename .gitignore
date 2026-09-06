@@ -32,3 +32,6 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# 備份資料夾（由 Google Drive 桌面版同步到雲端，不進版控）
+備份相本/
