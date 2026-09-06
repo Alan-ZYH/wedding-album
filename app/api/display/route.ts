@@ -62,12 +62,16 @@ export async function POST(req: NextRequest) {
         { merge: true }
       )
 
-      // Rule Y: the photo that just played steps aside for the next in the queue.
-      if (rotate?.playedId && rotate?.promoteId) {
-        batch.update(adminDb.collection(COLLECTIONS.MEDIA).doc(rotate.playedId), {
-          displayState: 'masked',
-          displayStateAt: now,
-        })
+      // Rule Y: the photo that just played steps aside for the next in the
+      // queue. playedId is optional — omitting it promotes into a free slot
+      // without evicting anything, which is how an empty pool fills up.
+      if (rotate?.promoteId) {
+        if (rotate.playedId) {
+          batch.update(adminDb.collection(COLLECTIONS.MEDIA).doc(rotate.playedId), {
+            displayState: 'masked',
+            displayStateAt: now,
+          })
+        }
         batch.update(adminDb.collection(COLLECTIONS.MEDIA).doc(rotate.promoteId), {
           displayState: 'playing',
           displayStateAt: now,

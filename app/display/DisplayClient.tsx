@@ -65,14 +65,18 @@ export default function DisplayClient() {
     )
   }, [])
 
-  // ── Firestore: media (newest first, filtered client-side by state) ──
+  // ── Firestore: media (state split happens client-side) ──
+  // Ordered ascending on purpose: Firestore composite indexes are
+  // direction-specific and only the ascending one exists for this filter set.
+  // Ordering descending here silently fails the whole query, which empties the
+  // display. 800 covers a wedding comfortably.
   useEffect(() => {
     if (!db) return
     const q = query(
       collection(db, 'media'),
       where('status', '==', 'active'),
       where('approved', '==', true),
-      orderBy('uploadTime', 'desc'),
+      orderBy('uploadTime', 'asc'),
       limit(800)
     )
     return onSnapshot(q, (snap) => {
@@ -214,6 +218,32 @@ export default function DisplayClient() {
     if (Date.now() - new Date(jumpAt).getTime() > 30_000) return
     if (isController) setLocalCurrentId(playback.currentMediaId)
   }, [playback?.jumpAt, playback?.currentMediaId, isController])
+
+  // Fill empty carousel slots from the pending queue.
+  //
+  // Rule Y only rotates when a playing photo finishes its turn, so a pool that
+  // starts empty (or gains slots because pinned photos were removed) would
+  // never bootstrap. This tops it up one photo at a time until it is full.
+  const fillingRef = useRef(false)
+  useEffect(() => {
+    if (!isController || !allowRef.current) return
+    const slots = Math.max(0, (settings.carouselSize ?? 50) - pinned.length)
+    if (playingPool.length >= slots || pendingQueue.length === 0) return
+    if (fillingRef.current) return
+    fillingRef.current = true
+    fetch('/api/display', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'advance',
+        clientId: clientIdRef.current,
+        currentMediaId: curIdRef.current ?? '',
+        rotate: { promoteId: pendingQueue[0].id },   // promote without evicting
+      }),
+    })
+      .catch(() => {})
+      .finally(() => { fillingRef.current = false })
+  }, [isController, pinned.length, playingPool.length, pendingQueue, settings.carouselSize])
 
   // Seed the position once media arrives
   useEffect(() => {

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { collection, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore'
+import { useState, useEffect, useCallback } from 'react'
+import { collection, onSnapshot, query, limit, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Guest, Media, Message } from '@/types'
 
@@ -12,16 +12,23 @@ export default function GuestsPage() {
   const [processing, setProcessing] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
-  useEffect(() => {
-    if (!db) return
-    const q = query(collection(db, 'guests'), orderBy('lastActiveAt', 'desc'), limit(500))
-    const unsub = onSnapshot(
-      q,
-      (snap) => { setGuests(snap.docs.map((d) => d.data() as Guest)); setLoading(false) },
-      () => setLoading(false)
-    )
-    return () => unsub()
+  // The `guests` collection is admin-only, so it is read through the API
+  // (Admin SDK) rather than the browser SDK, which Firestore rules block.
+  // Polling keeps it near-live without opening the collection to clients.
+  const loadGuests = useCallback(async () => {
+    try {
+      const res = await fetch('/api/guests')
+      const data = await res.json()
+      if (data.success) setGuests(data.data as Guest[])
+    } catch { /* keep the previous list */ }
+    finally { setLoading(false) }
   }, [])
+
+  useEffect(() => {
+    loadGuests()
+    const t = setInterval(loadGuests, 10_000)
+    return () => clearInterval(t)
+  }, [loadGuests])
 
   const toggleBlock = async (guest: Guest) => {
     const next = !guest.blocked
@@ -40,6 +47,7 @@ export default function GuestsPage() {
         body: JSON.stringify({ blocked: next }),
       })
       const data = await res.json()
+      await loadGuests()
       if (data.success && next) {
         alert(`已封鎖。遮蔽 ${data.maskedPhotos} 張照片、隱藏 ${data.hiddenMessages} 則祝福。`)
       } else if (!data.success) {
