@@ -5,6 +5,7 @@ import { collection, doc, onSnapshot, query, where, orderBy, limit } from 'fireb
 import { db } from '@/lib/firebase'
 import { Media, Message, Settings, DEFAULT_SETTINGS, PlaybackState } from '@/types'
 import DanmakuLayer from '@/components/display/DanmakuLayer'
+import QrOverlay from '@/components/display/QrOverlay'
 
 /**
  * Interleave pinned photos evenly through the carousel.
@@ -381,6 +382,13 @@ export default function DisplayClient() {
             🔇 點擊螢幕以啟用聲音
           </div>
         </div>
+      )}
+
+      {settings.showQrCode !== false && (
+        <QrOverlay
+          position={settings.qrPosition ?? 'bottom-right'}
+          size={settings.qrSize ?? 160}
+        />
       )}
 
       {settings.showDanmaku && messages.length > 0 && (

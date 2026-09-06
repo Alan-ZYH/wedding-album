@@ -41,7 +41,13 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       if (!status || !allowedStatuses.includes(status)) {
         return NextResponse.json({ success: false, error: '無權限執行此操作' }, { status: 403 })
       }
-      await docRef.update({ status })
+      // A photo the guest pulled back is also out of the carousel — otherwise
+      // the admin sees "已隱藏" while the state buttons still say 待播.
+      await docRef.update({
+        status,
+        displayState: 'masked',
+        displayStateAt: new Date().toISOString(),
+      })
       return NextResponse.json({ success: true })
     }
 

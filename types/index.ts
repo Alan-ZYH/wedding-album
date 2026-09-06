@@ -44,6 +44,7 @@ export interface Message {
 
 export type SlideTransition = 'fade' | 'slide' | 'zoom' | 'none'
 export type DanmakuStyle = 'scroll' | 'scroll-reverse' | 'float' | 'fade'
+export type QrPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 export interface Settings {
   albumName: string         // event/album title shown on guest page
@@ -61,6 +62,9 @@ export interface Settings {
   danmakuStyle: DanmakuStyle
   carouselSize: number      // max photos in the carousel (pinned + playing)
   allowInsert: boolean      // when false, new uploads stay in 'pending'
+  showQrCode: boolean       // overlay the guest QR on the projection screen
+  qrPosition: QrPosition
+  qrSize: number            // px, rendered size of the QR block
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -79,6 +83,9 @@ export const DEFAULT_SETTINGS: Settings = {
   danmakuStyle: 'scroll',
   carouselSize: 50,
   allowInsert: true,
+  showQrCode: true,
+  qrPosition: 'bottom-right',
+  qrSize: 160,
 }
 
 /**

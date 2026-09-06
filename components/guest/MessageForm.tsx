@@ -148,66 +148,9 @@ export default function MessageForm({ guestId, guestName }: Props) {
         </button>
       </form>
 
-      {/* My messages */}
-      {myMessages.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-sm font-medium text-gray-600 mb-3">我的祝福 ({myMessages.length})</h3>
-          <div className="space-y-3">
-            {myMessages.map((msg) => (
-              <div key={msg.id} className="bg-white rounded-xl border border-[#e8d5a3] p-3">
-                {editingId === msg.id ? (
-                  <div>
-                    <textarea
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      maxLength={500}
-                      rows={3}
-                      className="w-full resize-none text-sm border border-[#e8d5a3] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#c9a84c]"
-                    />
-                    <div className="flex gap-2 mt-2">
-                      <button
-                        onClick={() => handleEdit(msg.id)}
-                        className="text-xs bg-[#c9a84c] text-white px-3 py-1 rounded-lg"
-                      >
-                        儲存
-                      </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-xs text-gray-500 px-3 py-1 rounded-lg border"
-                      >
-                        取消
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-sm text-gray-700">{msg.message}</p>
-                    <div className="flex justify-between items-center mt-2">
-                      <span className="text-xs text-gray-400">
-                        {new Date(msg.createdAt).toLocaleDateString('zh-TW')}
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => { setEditingId(msg.id); setEditText(msg.message) }}
-                          className="text-xs text-[#c9a84c] hover:underline"
-                        >
-                          編輯
-                        </button>
-                        <button
-                          onClick={() => handleDelete(msg.id)}
-                          className="text-xs text-red-400 hover:underline"
-                        >
-                          刪除
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <p className="text-xs text-gray-400 mt-4 text-center">
+        送出後可在「我的上傳」修改或刪除自己的祝福
+      </p>
     </div>
   )
 }

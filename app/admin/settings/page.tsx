@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Settings, DEFAULT_SETTINGS, SlideTransition, DanmakuStyle } from '@/types'
+import { Settings, DEFAULT_SETTINGS, SlideTransition, DanmakuStyle, QrPosition } from '@/types'
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
@@ -143,6 +143,31 @@ export default function SettingsPage() {
           />
         </Section>
 
+        {/* QR code on the projection screen */}
+        <Section title="投放端 QR Code" icon="📱">
+          <ToggleField
+            label="顯示 QR Code"
+            description="在大螢幕角落常駐，讓晚到的賓客隨時能掃描加入"
+            value={settings.showQrCode !== false}
+            onChange={(v) => update('showQrCode', v)}
+          />
+          {settings.showQrCode !== false && (
+            <>
+              <QrPositionField
+                value={settings.qrPosition ?? 'bottom-right'}
+                onChange={(v) => update('qrPosition', v)}
+              />
+              <SliderField
+                label="QR Code 大小"
+                min={100} max={320} step={10}
+                value={settings.qrSize ?? 160}
+                onChange={(v) => update('qrSize', v)}
+                display={`${settings.qrSize ?? 160}px`}
+              />
+            </>
+          )}
+        </Section>
+
         {/* Danmaku section */}
         <Section title="彈幕設定" icon="💬">
           <ToggleField
@@ -249,6 +274,43 @@ function DanmakuStyleField({
             <p className="text-[10px] text-gray-400 mt-0.5">{opt.desc}</p>
           </button>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function QrPositionField({
+  value, onChange,
+}: {
+  value: QrPosition
+  onChange: (v: QrPosition) => void
+}) {
+  const corners: { value: QrPosition; label: string }[] = [
+    { value: 'top-left', label: '左上' },
+    { value: 'top-right', label: '右上' },
+    { value: 'bottom-left', label: '左下' },
+    { value: 'bottom-right', label: '右下' },
+  ]
+  return (
+    <div>
+      <p className="text-sm font-medium text-gray-700 mb-2">顯示位置</p>
+      {/* Laid out as the screen itself so the choice maps to what you see */}
+      <div className="relative bg-gray-900 rounded-xl aspect-video max-w-xs p-2">
+        <div className="grid grid-cols-2 grid-rows-2 gap-2 h-full">
+          {corners.map((c) => (
+            <button
+              key={c.value}
+              onClick={() => onChange(c.value)}
+              className={`rounded-lg text-xs font-medium transition-all ${
+                value === c.value
+                  ? 'bg-[#c9a84c] text-white'
+                  : 'bg-white/10 text-white/50 hover:bg-white/20'
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )
