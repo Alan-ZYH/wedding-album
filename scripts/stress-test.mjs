@@ -84,6 +84,8 @@ async function seed(count = 500) {
         uploadTime,
         status: 'active',
         approved: true,
+        displayState: 'pending',
+        displayStateAt: uploadTime,
       })
     }
     await batch.commit()
