@@ -1,78 +1,87 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { collection, doc, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { Media, Message, Settings, DEFAULT_SETTINGS } from '@/types'
+import { Media, Message, Settings, DEFAULT_SETTINGS, PlaybackState } from '@/types'
 import DanmakuLayer from '@/components/display/DanmakuLayer'
 
+/**
+ * Interleave pinned photos evenly through the carousel.
+ *
+ * Pinned photos occupy slots out of `size`; whatever is left goes to the
+ * newest `playing` photos. Spacing follows the real ratio rather than a fixed
+ * gap, so 12 pinned out of 50 lands roughly every 3rd slide while 25 out of 50
+ * alternates — the rhythm stays even at any mix.
+ */
+function buildSequence(pinned: Media[], playing: Media[], size: number): Media[] {
+  const p = pinned.slice(0, size)
+  const slots = Math.max(0, size - p.length)
+  const q = slots > 0 ? playing.slice(-slots) : []   // keep the newest
+  if (p.length === 0) return q
+  if (q.length === 0) return p
+
+  const total = p.length + q.length
+  const out: Media[] = []
+  let pi = 0
+  let qi = 0
+  for (let i = 0; i < total; i++) {
+    const due = Math.floor(((i + 1) * p.length) / total) > Math.floor((i * p.length) / total)
+    if (due && pi < p.length) out.push(p[pi++])
+    else if (qi < q.length) out.push(q[qi++])
+    else if (pi < p.length) out.push(p[pi++])
+  }
+  return out
+}
+
 export default function DisplayClient() {
-  const [media, setMedia] = useState<Media[]>([])
+  const [allMedia, setAllMedia] = useState<Media[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
-  const [currentIndex, setCurrentIndex] = useState(0)
+  const [playback, setPlayback] = useState<PlaybackState | null>(null)
+  const [isController, setIsController] = useState(false)
+  const [localCurrentId, setLocalCurrentId] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [loading, setLoading] = useState(true)
-  // audioUnlocked: true once the user has clicked anywhere on the display.
-  // Browsers require a user gesture before allowing unmuted autoplay.
+  // Browsers need a user gesture before unmuted autoplay is allowed
   const [audioUnlocked, setAudioUnlocked] = useState(false)
+  // Videos that failed to decode this session — skipped without a DB write
+  const [sessionSkipped, setSessionSkipped] = useState<Set<string>>(new Set())
+
   const containerRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Stable random order: remembers the shuffled position of each media id so
-  // new uploads are appended at the end instead of reshuffling mid-show.
-  const shuffledOrderRef = useRef<Map<string, number>>(new Map())
+  const clientIdRef = useRef<string>('')
+  if (!clientIdRef.current && typeof window !== 'undefined') {
+    clientIdRef.current = Math.random().toString(36).slice(2) + Date.now().toString(36)
+  }
 
-  // Real-time settings via Firestore onSnapshot
+  // ── Firestore: settings ──────────────────────────────────────
   useEffect(() => {
     if (!db) return
-    const unsub = onSnapshot(
+    return onSnapshot(
       doc(db, 'settings', 'config'),
-      (snap) => {
-        if (snap.exists()) setSettings({ ...DEFAULT_SETTINGS, ...snap.data() } as Settings)
-      },
+      (snap) => { if (snap.exists()) setSettings({ ...DEFAULT_SETTINGS, ...snap.data() } as Settings) },
       () => {}
     )
-    return () => unsub()
   }, [])
 
-  // Real-time media list
+  // ── Firestore: media (newest first, filtered client-side by state) ──
   useEffect(() => {
     if (!db) return
     const q = query(
       collection(db, 'media'),
       where('status', '==', 'active'),
       where('approved', '==', true),
-      orderBy('uploadTime', 'asc'),
+      orderBy('uploadTime', 'desc'),
       limit(800)
     )
-    const unsub = onSnapshot(q, (snap) => {
-      const items = snap.docs
-        .map((d) => d.data() as Media)
-        // displayError only permanently excludes photos (broken Drive URL).
-        // Videos are retried each session with the new public URL approach.
-        .filter((m) => !(m.displayError && m.fileType !== 'video'))
-        .filter((m) => !(m.fileType === 'video' && !settings.playVideos))
-
-      let ordered = items
-      if (settings.randomPlayback) {
-        // Assign a stable random sort key to each new id; existing ids keep
-        // their position so the running slideshow never reshuffles.
-        const order = shuffledOrderRef.current
-        for (const m of items) {
-          if (!order.has(m.id)) order.set(m.id, order.size + Math.random())
-        }
-        ordered = [...items].sort((a, b) => order.get(a.id)! - order.get(b.id)!)
-      }
-
-      setMedia(ordered)
-      // Clamp index if the list shrank (admin hid/deleted items)
-      setCurrentIndex((idx) => (idx >= ordered.length ? 0 : idx))
+    return onSnapshot(q, (snap) => {
+      setAllMedia(snap.docs.map((d) => d.data() as Media))
       setLoading(false)
-    })
-    return () => unsub()
-  }, [settings.playVideos, settings.randomPlayback])
+    }, () => setLoading(false))
+  }, [])
 
-  // Real-time messages
+  // ── Firestore: messages ──────────────────────────────────────
   useEffect(() => {
     if (!db) return
     const q = query(
@@ -81,62 +90,155 @@ export default function DisplayClient() {
       orderBy('createdAt', 'asc'),
       limit(500)
     )
-    const unsub = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map((d) => d.data() as Message))
-    })
-    return () => unsub()
+    return onSnapshot(q, (snap) => setMessages(snap.docs.map((d) => d.data() as Message)), () => {})
   }, [])
 
+  // ── Firestore: playback position (multi-screen sync) ─────────
+  useEffect(() => {
+    if (!db) return
+    return onSnapshot(
+      doc(db, 'display', 'playback'),
+      (snap) => setPlayback(snap.exists() ? (snap.data() as PlaybackState) : null),
+      () => {}
+    )
+  }, [])
+
+  // ── Controller election ──────────────────────────────────────
+  // Every screen offers to take over; the server only grants it when the
+  // incumbent's heartbeat has gone stale, so exactly one screen drives.
+  useEffect(() => {
+    let cancelled = false
+    const claim = async () => {
+      try {
+        const res = await fetch('/api/display', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'claim', clientId: clientIdRef.current }),
+        })
+        const data = await res.json()
+        if (!cancelled) setIsController(!!data.isController)
+      } catch { /* keep previous role */ }
+    }
+    claim()
+    const t = setInterval(claim, 10_000)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [])
+
+  // ── Split media by display state ─────────────────────────────
+  const { pinned, playingPool, pendingQueue } = useMemo(() => {
+    const usable = allMedia.filter(
+      (m) => !(m.displayError && m.fileType !== 'video') && !sessionSkipped.has(m.id)
+    )
+    const videosOk = (m: Media) => !(m.fileType === 'video' && !settings.playVideos)
+    return {
+      pinned: usable
+        .filter((m) => m.displayState === 'pinned' && videosOk(m))
+        .sort((a, b) => (a.pinnedOrder ?? 0) - (b.pinnedOrder ?? 0)),
+      // oldest first — the front of this list is what rule Y evicts
+      playingPool: usable
+        .filter((m) => m.displayState === 'playing' && videosOk(m))
+        .sort((a, b) => (a.displayStateAt || '').localeCompare(b.displayStateAt || '')),
+      // oldest first — the front is promoted next
+      pendingQueue: usable
+        .filter((m) => m.displayState === 'pending' && videosOk(m))
+        .sort((a, b) => (a.displayStateAt || '').localeCompare(b.displayStateAt || '')),
+    }
+  }, [allMedia, settings.playVideos, sessionSkipped])
+
+  const sequence = useMemo(
+    () => buildSequence(pinned, playingPool, settings.carouselSize ?? 50),
+    [pinned, playingPool, settings.carouselSize]
+  )
+
+  // Controller drives its own position; followers mirror the shared one.
+  const currentMediaId = isController ? localCurrentId : playback?.currentMediaId ?? null
+  const currentIndex = sequence.findIndex((m) => m.id === currentMediaId)
+  const current = currentIndex >= 0 ? sequence[currentIndex] : sequence[0]
+  const nextItem =
+    sequence.length > 1
+      ? sequence[((currentIndex < 0 ? 0 : currentIndex) + 1) % sequence.length]
+      : null
+
+  // Refs so timers can read fresh values without re-subscribing
+  const seqRef = useRef(sequence);        seqRef.current = sequence
+  const pendingRef = useRef(pendingQueue); pendingRef.current = pendingQueue
+  const curIdRef = useRef(currentMediaId); curIdRef.current = currentMediaId
+  const ctrlRef = useRef(isController);    ctrlRef.current = isController
+  const allowRef = useRef(settings.allowInsert !== false)
+  allowRef.current = settings.allowInsert !== false
+
+  // ── Advance ──────────────────────────────────────────────────
   const goNext = useCallback(() => {
-    setCurrentIndex((prev) => (prev + 1) % Math.max(media.length, 1))
-  }, [media.length])
+    const seq = seqRef.current
+    if (seq.length === 0) return
+    const idx = seq.findIndex((m) => m.id === curIdRef.current)
+    const played = idx >= 0 ? seq[idx] : null
+    const next = seq[(idx < 0 ? -1 : idx) + 1 >= seq.length ? 0 : (idx < 0 ? 0 : idx + 1)]
+    setLocalCurrentId(next?.id ?? null)
 
-  // Clicking the display both advances the slide AND unlocks audio
-  const handleUserInteraction = useCallback(() => {
-    setAudioUnlocked(true)
-    goNext()
-  }, [goNext])
+    if (!ctrlRef.current) return
 
-  const goPrev = () => {
-    setAudioUnlocked(true)
-    setCurrentIndex((prev) => (prev - 1 + media.length) % Math.max(media.length, 1))
-  }
+    // Rule Y — a photo that has had its turn steps aside for the queue.
+    // Pinned photos never rotate out; when the queue is empty the pool
+    // simply keeps looping.
+    const queue = pendingRef.current
+    const rotate =
+      allowRef.current && played?.displayState === 'playing' && queue.length > 0
+        ? { playedId: played.id, promoteId: queue[0].id }
+        : undefined
 
-  // Keep goNext reachable from timers without making it a dependency
+    fetch('/api/display', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'advance',
+        clientId: clientIdRef.current,
+        currentMediaId: next?.id ?? '',
+        rotate,
+      }),
+    }).catch(() => {})
+  }, [])
+
   const goNextRef = useRef(goNext)
-  useEffect(() => { goNextRef.current = goNext }, [goNext])
+  goNextRef.current = goNext
 
-  // Auto-advance timer for photos.
-  // Depends on the CURRENT ITEM's identity, not the whole media array — a guest
-  // uploading mid-slide must not restart the countdown. With `media` as a
-  // dependency, frequent uploads (peak reception) reset the timer faster than it
-  // expires and the slideshow freezes on one photo.
-  const currentSlideId = media[currentIndex]?.id
-  const currentSlideIsVideo = media[currentIndex]?.fileType === 'video'
+  // An admin pressing ▶️ writes currentMediaId + jumpAt; followers mirror it
+  // automatically, and the controller cuts to it here. Old jumps are ignored so
+  // a screen reloading mid-event doesn't replay a stale command.
+  const jumpHandledRef = useRef<string | null>(null)
+  useEffect(() => {
+    const jumpAt = playback?.jumpAt
+    if (!jumpAt || !playback?.currentMediaId) return
+    if (jumpHandledRef.current === jumpAt) return
+    jumpHandledRef.current = jumpAt
+    if (Date.now() - new Date(jumpAt).getTime() > 30_000) return
+    if (isController) setLocalCurrentId(playback.currentMediaId)
+  }, [playback?.jumpAt, playback?.currentMediaId, isController])
+
+  // Seed the position once media arrives
+  useEffect(() => {
+    if (isController && !localCurrentId && sequence.length > 0) {
+      setLocalCurrentId(sequence[0].id)
+    }
+  }, [isController, localCurrentId, sequence])
+
+  // ── Auto-advance timer (photos only; videos advance on 'ended') ──
+  // Keyed on the current item's identity, never on the media array, so a guest
+  // uploading mid-slide cannot restart the countdown.
+  const currentSlideId = current?.id
+  const currentIsVideo = current?.fileType === 'video'
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
-    if (!currentSlideId) return
-    if (currentSlideIsVideo && settings.playVideos) return
+    if (!isController || !currentSlideId) return
+    if (currentIsVideo && settings.playVideos) return
     timerRef.current = setTimeout(() => goNextRef.current(), settings.slideInterval * 1000)
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [currentSlideId, currentSlideIsVideo, settings.slideInterval, settings.playVideos])
-
-  // Track videos that failed to play this session (skip without Firestore write)
-  const [sessionSkipped, setSessionSkipped] = useState<Set<string>>(new Set())
+  }, [isController, currentSlideId, currentIsVideo, settings.slideInterval, settings.playVideos])
 
   const skipVideo = useCallback((id: string) => {
     setSessionSkipped((s) => new Set(s).add(id))
   }, [])
 
-  // Auto-advance when the current item was session-skipped (video error).
-  // Keyed on the current item's id so incoming uploads don't re-trigger it.
-  useEffect(() => {
-    if (currentSlideId && sessionSkipped.has(currentSlideId)) {
-      goNextRef.current()
-    }
-  }, [currentSlideId, sessionSkipped])
-
-  // Mark a media item as having a display error
   const markDisplayError = useCallback(async (mediaId: string) => {
     try {
       await fetch(`/api/media/${mediaId}`, {
@@ -146,6 +248,21 @@ export default function DisplayClient() {
       })
     } catch {}
   }, [])
+
+  // Clicking advances and unlocks audio
+  const handleUserInteraction = useCallback(() => {
+    setAudioUnlocked(true)
+    goNextRef.current()
+  }, [])
+
+  const goPrev = () => {
+    setAudioUnlocked(true)
+    const seq = seqRef.current
+    if (seq.length === 0) return
+    const idx = seq.findIndex((m) => m.id === curIdRef.current)
+    const prev = seq[(idx <= 0 ? seq.length : idx) - 1]
+    setLocalCurrentId(prev?.id ?? null)
+  }
 
   const toggleFullscreen = () => {
     setAudioUnlocked(true)
@@ -164,23 +281,18 @@ export default function DisplayClient() {
     return () => document.removeEventListener('fullscreenchange', handler)
   }, [])
 
-  const current = media[currentIndex]
-  const nextIndex = media.length > 1 ? (currentIndex + 1) % media.length : -1
-  const nextItem = nextIndex >= 0 ? media[nextIndex] : null
-
-  // Preload the photo after next with a detached Image object so fast
-  // slide intervals (2-3s) never show a blank frame
+  // Preload the photo after next so short intervals never show a blank frame
   useEffect(() => {
-    if (media.length < 3) return
-    const nextNext = media[(currentIndex + 2) % media.length]
-    if (nextNext && nextNext.fileType === 'photo') {
+    if (sequence.length < 3 || currentIndex < 0) return
+    const after = sequence[(currentIndex + 2) % sequence.length]
+    if (after?.fileType === 'photo') {
       const img = new Image()
-      img.src = `https://lh3.googleusercontent.com/d/${nextNext.googleDriveFileId}=w1920`
+      img.src = `https://lh3.googleusercontent.com/d/${after.googleDriveFileId}=w1920`
     }
-  }, [currentIndex, media])
+  }, [currentIndex, sequence])
 
-  // Show audio hint when: admin wants sound, user hasn't clicked yet, a video is playing
-  const showAudioHint = !settings.muteVideos && !audioUnlocked && current?.fileType === 'video' && settings.playVideos
+  const showAudioHint =
+    !settings.muteVideos && !audioUnlocked && current?.fileType === 'video' && settings.playVideos
 
   return (
     <div
@@ -193,10 +305,10 @@ export default function DisplayClient() {
           <div className="text-center text-white">
             <div className="text-6xl mb-4 animate-pulse">💍</div>
             <p className="text-xl font-serif opacity-70">{settings.albumName || DEFAULT_SETTINGS.albumName}</p>
-            <p className="text-sm opacity-40 mt-2">等待賓客上傳照片...</p>
+            <p className="text-sm opacity-40 mt-2">載入中...</p>
           </div>
         </div>
-      ) : media.length === 0 ? (
+      ) : sequence.length === 0 ? (
         <WaitingScreen albumName={settings.albumName || DEFAULT_SETTINGS.albumName} />
       ) : (
         <>
@@ -207,33 +319,25 @@ export default function DisplayClient() {
               settings={settings}
               active={true}
               audioAllowed={audioUnlocked}
-              onVideoEnd={goNext}
+              onVideoEnd={() => goNextRef.current()}
               onMediaError={() => {
-                if (current.fileType === 'video') {
-                  // Videos: skip for this session only, don't permanently mark
-                  skipVideo(current.id); goNext()
-                } else {
-                  // Photos: permanently mark broken URL
-                  markDisplayError(current.id); goNext()
-                }
+                if (current.fileType === 'video') { skipVideo(current.id); goNextRef.current() }
+                else { markDisplayError(current.id); goNextRef.current() }
               }}
               transition={settings.slideTransition ?? 'fade'}
             />
           )}
-          {nextItem && (
+          {nextItem && nextItem.id !== current?.id && (
             <Slide
               key={nextItem.id}
               item={nextItem}
               settings={settings}
               active={false}
               audioAllowed={audioUnlocked}
-              onVideoEnd={goNext}
+              onVideoEnd={() => goNextRef.current()}
               onMediaError={() => {
-                // Preloading slot (inactive) — don't permanently mark photos as broken
-                // before the user has even seen them. Let errors surface when the item
-                // becomes active and is actually displayed.
+                // Preloading slot: never brand a photo broken before it is shown
                 if (nextItem.fileType === 'video') skipVideo(nextItem.id)
-                // photos: no-op here; will be handled when they become active
               }}
               transition={settings.slideTransition ?? 'fade'}
             />
@@ -241,7 +345,6 @@ export default function DisplayClient() {
         </>
       )}
 
-      {/* Audio unlock hint — appears when video is playing but audio needs user gesture */}
       {showAudioHint && (
         <div className="absolute bottom-20 left-0 right-0 flex justify-center z-25 pointer-events-none">
           <div className="bg-black/60 text-white/80 text-sm px-5 py-2 rounded-full animate-pulse">
@@ -270,8 +373,12 @@ export default function DisplayClient() {
         >
           ← 上一張
         </button>
-        <div className="text-white/60 text-sm font-mono">
-          {media.length > 0 ? `${currentIndex + 1} / ${media.length}` : ''}
+        <div className="text-white/60 text-sm font-mono flex items-center gap-3">
+          {sequence.length > 0 && `${(currentIndex < 0 ? 0 : currentIndex) + 1} / ${sequence.length}`}
+          {pendingQueue.length > 0 && (
+            <span className="text-[#c9a84c]">待播 {pendingQueue.length}</span>
+          )}
+          {!isController && <span className="text-white/40">同步中</span>}
         </div>
         <button
           onClick={toggleFullscreen}
@@ -281,12 +388,12 @@ export default function DisplayClient() {
         </button>
       </div>
 
-      {media.length > 1 && media.length <= 30 && (
+      {sequence.length > 1 && sequence.length <= 30 && (
         <div className="absolute bottom-0 left-0 right-0 flex gap-0.5 px-4 pb-3 opacity-30 hover:opacity-70 transition-opacity z-30">
-          {media.map((_, i) => (
+          {sequence.map((m, i) => (
             <div
-              key={i}
-              onClick={(e) => { e.stopPropagation(); setCurrentIndex(i) }}
+              key={m.id}
+              onClick={(e) => { e.stopPropagation(); setLocalCurrentId(m.id) }}
               className={`h-0.5 flex-1 rounded-full transition-colors cursor-pointer ${
                 i === currentIndex ? 'bg-[#c9a84c]' : 'bg-white/40'
               }`}
@@ -294,14 +401,12 @@ export default function DisplayClient() {
           ))}
         </div>
       )}
-      {media.length > 30 && (
-        // Single progress bar for large collections — avoids rendering
-        // hundreds of DOM nodes on the display device
+      {sequence.length > 30 && (
         <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 opacity-30 hover:opacity-70 transition-opacity z-30">
           <div className="h-0.5 bg-white/20 rounded-full overflow-hidden">
             <div
               className="h-full bg-[#c9a84c] rounded-full transition-all duration-500"
-              style={{ width: `${((currentIndex + 1) / media.length) * 100}%` }}
+              style={{ width: `${(((currentIndex < 0 ? 0 : currentIndex) + 1) / sequence.length) * 100}%` }}
             />
           </div>
         </div>

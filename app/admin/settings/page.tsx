@@ -94,12 +94,6 @@ export default function SettingsPage() {
             onChange={(v) => update('slideTransition', v)}
           />
           <ToggleField
-            label="隨機播放順序"
-            description="開啟後照片以隨機順序播放"
-            value={settings.randomPlayback}
-            onChange={(v) => update('randomPlayback', v)}
-          />
-          <ToggleField
             label="顯示上傳者名稱"
             description={`例：「Photo by 王小明」`}
             value={settings.showGuestName}
@@ -110,6 +104,26 @@ export default function SettingsPage() {
             description="開啟後媒體須通過管理員審核才出現在投放端"
             value={settings.requireApproval}
             onChange={(v) => update('requireApproval', v)}
+          />
+        </Section>
+
+        {/* Carousel pool */}
+        <Section title="輪播池設定" icon="🎠">
+          <SliderField
+            label="輪播照片數量"
+            min={20} max={100} step={5}
+            value={settings.carouselSize ?? 50}
+            onChange={(v) => update('carouselSize', v)}
+            display={`${settings.carouselSize ?? 50} 張`}
+          />
+          <p className="text-xs text-gray-400 -mt-2">
+            置頂照片會佔用這個額度。置頂張數越多，待播照片遞補得越慢。
+          </p>
+          <ToggleField
+            label="允許插播"
+            description="關閉後，賓客新上傳的照片會停在「待播」不上大螢幕；重新開啟時依序遞補"
+            value={settings.allowInsert !== false}
+            onChange={(v) => update('allowInsert', v)}
           />
         </Section>
 

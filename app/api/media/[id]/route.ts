@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { deleteFileFromDrive } from '@/lib/google-drive'
-import { Media } from '@/types'
+import { Media, DisplayState } from '@/types'
+import { getSettings } from '@/lib/settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,6 +49,51 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const updates: Record<string, unknown> = {}
     for (const field of allowedFields) {
       if (field in body) updates[field] = body[field]
+    }
+
+    // ── Carousel state transitions ──────────────────────────────
+    const nextState = body.displayState as DisplayState | undefined
+    if (nextState && ['pending', 'playing', 'pinned', 'masked'].includes(nextState)) {
+      const now = new Date().toISOString()
+      updates.displayState = nextState
+      updates.displayStateAt = now
+      if (nextState === 'pinned') updates.pinnedOrder = Date.now()
+
+      // ▶️ means "cut the queue": the photo joins the carousel and every
+      // screen jumps to it. If the pool is already full, the photo that has
+      // been playing longest steps aside to make room.
+      if (nextState === 'playing') {
+        const settings = await getSettings()
+        const size = settings.carouselSize ?? 50
+        const [pinnedSnap, playingSnap] = await Promise.all([
+          adminDb.collection(COLLECTIONS.MEDIA)
+            .where('displayState', '==', 'pinned').get(),
+          adminDb.collection(COLLECTIONS.MEDIA)
+            .where('displayState', '==', 'playing').get(),
+        ])
+        const slots = Math.max(0, size - pinnedSnap.size)
+        const others = playingSnap.docs.filter((d) => d.id !== id)
+        if (others.length >= slots) {
+          const oldest = others
+            .sort((a, b) =>
+              String(a.data().displayStateAt || '').localeCompare(String(b.data().displayStateAt || ''))
+            )
+            .slice(0, others.length - slots + 1)
+          const batch = adminDb.batch()
+          oldest.forEach((d) =>
+            batch.update(d.ref, { displayState: 'masked', displayStateAt: now })
+          )
+          await batch.commit()
+        }
+        await adminDb.collection('display').doc('playback').set(
+          { currentMediaId: id, jumpAt: now },
+          { merge: true }
+        )
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ success: false, error: '沒有可更新的欄位' }, { status: 400 })
     }
 
     await docRef.update(updates)

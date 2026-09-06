@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { Media } from '@/types'
+import { Media, DisplayState } from '@/types'
 
 const PAGE_SIZE = 60 // cards rendered at a time; "load more" reveals the next batch
 
@@ -18,6 +18,7 @@ function MediaPageContent() {
     type: searchParams.get('type') || 'all',
     pending: searchParams.get('pending') === 'true',
     search: '',
+    state: 'all' as 'all' | DisplayState,
   })
   const [preview, setPreview] = useState<Media | null>(null)
   const [processing, setProcessing] = useState<string | null>(null)
@@ -37,12 +38,13 @@ function MediaPageContent() {
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
-  }, [filter.type, filter.pending, filter.search])
+  }, [filter.type, filter.pending, filter.search, filter.state])
 
   const filtered = media.filter((m) => {
     if (m.status === 'deleted') return false
     if (filter.type !== 'all' && m.fileType !== filter.type) return false
     if (filter.pending && m.approved) return false
+    if (filter.state !== 'all' && (m.displayState ?? 'pending') !== filter.state) return false
     if (filter.search) {
       const s = filter.search.toLowerCase()
       if (!m.guestName.toLowerCase().includes(s) && !m.fileName.toLowerCase().includes(s)) return false
@@ -171,6 +173,17 @@ function MediaPageContent() {
           <option value="photo">照片</option>
           <option value="video">影片</option>
         </select>
+        <select
+          value={filter.state}
+          onChange={(e) => setFilter((f) => ({ ...f, state: e.target.value as 'all' | DisplayState }))}
+          className="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none"
+        >
+          <option value="all">全部狀態</option>
+          <option value="pinned">📌 置頂</option>
+          <option value="playing">▶️ 播放中</option>
+          <option value="pending">⏳ 待播</option>
+          <option value="masked">⬜ 已遮蔽</option>
+        </select>
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"
@@ -224,7 +237,7 @@ function MediaPageContent() {
                 onApprove={() => updateMedia(item.id, { approved: !item.approved })}
                 onHide={() => updateMedia(item.id, { status: item.status === 'hidden' ? 'active' : 'hidden' })}
                 onDelete={() => deleteMedia(item.id)}
-                onClearError={() => updateMedia(item.id, { displayError: false })}
+                onSetState={(st) => updateMedia(item.id, { displayState: st, displayError: false })}
               />
             ))}
           </div>
@@ -354,7 +367,7 @@ function MediaCard({
   onApprove,
   onHide,
   onDelete,
-  onClearError,
+  onSetState,
 }: {
   item: Media
   selected: boolean
@@ -364,7 +377,7 @@ function MediaCard({
   onApprove: () => void
   onHide: () => void
   onDelete: () => void
-  onClearError: () => void
+  onSetState: (s: DisplayState) => void
 }) {
   return (
     <div className={`relative bg-white rounded-xl border-2 transition-colors overflow-hidden ${
@@ -428,40 +441,52 @@ function MediaCard({
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-1 mt-2">
-          <button
-            onClick={onApprove}
-            className={`flex-1 text-xs py-1 rounded-lg transition-colors ${
-              item.approved
-                ? 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                : 'bg-green-100 text-green-700 hover:bg-green-200'
-            }`}
-          >
-            {item.approved ? '取消' : '通過'}
-          </button>
-          <button
-            onClick={onHide}
-            className="flex-1 text-xs py-1 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
-          >
-            {item.status === 'hidden' ? '顯示' : '隱藏'}
-          </button>
-          {item.displayError && (
-            <button
-              onClick={onClearError}
-              title="清除投放異常，重新加入輪播"
-              className="text-xs px-2 py-1 rounded-lg bg-orange-50 text-orange-500 hover:bg-orange-100 transition-colors"
-            >
-              🔄
-            </button>
-          )}
+        {/* Carousel state — the highlighted one is where this photo sits now */}
+        <div className="grid grid-cols-5 gap-1 mt-2">
+          {([
+            { st: 'pinned',  icon: '📌', label: '置頂' },
+            { st: 'playing', icon: '▶️', label: '播放' },
+            { st: 'pending', icon: '⏳', label: '待播' },
+            { st: 'masked',  icon: '⬜', label: '遮蔽' },
+          ] as { st: DisplayState; icon: string; label: string }[]).map((b) => {
+            const activeState = (item.displayState ?? 'pending') === b.st
+            return (
+              <button
+                key={b.st}
+                onClick={() => !activeState && onSetState(b.st)}
+                title={b.label}
+                className={`text-[10px] py-1 rounded-lg transition-colors leading-tight ${
+                  activeState
+                    ? 'bg-[#c9a84c] text-white font-medium'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                <span className="block text-xs">{b.icon}</span>
+                {b.label}
+              </button>
+            )
+          })}
           <button
             onClick={onDelete}
-            className="text-xs px-2 py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+            title="永久刪除"
+            className="text-[10px] py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors leading-tight"
           >
-            🗑
+            <span className="block text-xs">❌</span>
+            刪除
           </button>
         </div>
+
+        {/* Approval stays separate from carousel state */}
+        <button
+          onClick={onApprove}
+          className={`w-full mt-1 text-xs py-1 rounded-lg transition-colors ${
+            item.approved
+              ? 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              : 'bg-green-100 text-green-700 hover:bg-green-200'
+          }`}
+        >
+          {item.approved ? '取消審核通過' : '審核通過'}
+        </button>
       </div>
     </div>
   )

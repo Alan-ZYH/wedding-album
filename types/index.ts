@@ -110,7 +110,8 @@ export interface PlaybackState {
   controllerId: string
   heartbeatAt: string
   currentMediaId: string
-  currentIndex: number
+  /** Set when an admin forces a jump, so every screen cuts to it at once. */
+  jumpAt?: string
 }
 
 export interface UploadResult {
