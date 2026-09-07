@@ -8,6 +8,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  // How many photos the last save pushed out of 播放 by shrinking the carousel
+  const [masked, setMasked] = useState(0)
 
   useEffect(() => {
     fetch('/api/settings')
@@ -28,6 +30,7 @@ export default function SettingsPage() {
       const data = await res.json()
       if (data.success) {
         setSaved(true)
+        setMasked(data.masked ?? 0)
         setTimeout(() => setSaved(false), 2500)
       }
     } catch {}
@@ -113,6 +116,11 @@ export default function SettingsPage() {
           <p className="text-xs text-gray-400 -mt-2">
             置頂照片會佔用這個額度。置頂張數越多，待播照片遞補得越慢。
           </p>
+          {masked > 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              已將 {masked} 張播出最久的照片轉為「遮蔽」，讓輪播池符合新的數量。
+            </p>
+          )}
           <ToggleField
             label="允許插播"
             description="關閉後，賓客新上傳的照片會停在「待播」不上大螢幕；重新開啟時依序遞補"

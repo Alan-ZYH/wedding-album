@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSettings, updateSettings } from '@/lib/settings'
 import { isAdminAuthenticated } from '@/lib/auth'
+import { enforceCarouselCapacity } from '@/lib/carousel'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,15 @@ export async function PATCH(req: NextRequest) {
     delete body.adminAccessKey
     await updateSettings(body)
     const updated = await getSettings()
-    return NextResponse.json({ success: true, data: sanitizeSettings(updated as never) })
+
+    // Shrinking the carousel has to push the overflow out of 播放; otherwise
+    // those photos keep that label while the display silently skips them.
+    let masked = 0
+    if ('carouselSize' in body) {
+      masked = await enforceCarouselCapacity(updated.carouselSize ?? 50)
+    }
+
+    return NextResponse.json({ success: true, data: sanitizeSettings(updated as never), masked })
   } catch (err) {
     console.error('PATCH /api/settings error:', err)
     return NextResponse.json({ success: false, error: '更新設定失敗' }, { status: 500 })
