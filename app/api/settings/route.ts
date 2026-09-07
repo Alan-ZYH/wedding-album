@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 function sanitizeSettings(s: Record<string, any>) {
   // These live in the same Firestore document but must never leave the server
   // through this endpoint, which is public.
-  const { adminPassword: _pw, adminAccessKey: _key, ...safe } = s
+  const { adminPassword: _pw, adminAccessKey: _key, backupFolderId: _fid, ...safe } = s
   return safe
 }
 
@@ -35,6 +35,7 @@ export async function PATCH(req: NextRequest) {
     // Prevent accidental overwrite of adminPassword via this endpoint
     delete body.adminPassword
     delete body.adminAccessKey
+    delete body.backupFolderId
     await updateSettings(body)
     const updated = await getSettings()
 
