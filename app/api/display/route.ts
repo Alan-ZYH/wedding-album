@@ -15,7 +15,8 @@ const STALE_MS = 30_000
  *
  * POST body:
  *   { action: 'claim',   clientId }
- *   { action: 'advance', clientId, currentMediaId, rotate?: { playedId, promoteId } }
+ *   { action: 'advance', clientId, currentMediaId,
+ *     rotate?: { playedId?, promoteId?, promoteIds? } }
  */
 export async function POST(req: NextRequest) {
   try {
@@ -63,19 +64,25 @@ export async function POST(req: NextRequest) {
       )
 
       // Rule Y: the photo that just played steps aside for the next in the
-      // queue. playedId is optional — omitting it promotes into a free slot
-      // without evicting anything, which is how an empty pool fills up.
-      if (rotate?.promoteId) {
+      // queue. playedId is optional — omitting it promotes into free slots
+      // without evicting anything, which is how a pool below capacity grows.
+      // promoteIds fills every free slot in one write rather than one per
+      // slide, so a pool starting from empty does not take minutes to fill.
+      const promote: string[] = rotate?.promoteIds ?? (rotate?.promoteId ? [rotate.promoteId] : [])
+      if (promote.length) {
         if (rotate.playedId) {
           batch.update(adminDb.collection(COLLECTIONS.MEDIA).doc(rotate.playedId), {
             displayState: 'masked',
             displayStateAt: now,
           })
         }
-        batch.update(adminDb.collection(COLLECTIONS.MEDIA).doc(rotate.promoteId), {
-          displayState: 'playing',
-          displayStateAt: now,
-        })
+        // Firestore batches cap at 500 writes; carouselSize maxes out at 100
+        for (const id of promote.slice(0, 200)) {
+          batch.update(adminDb.collection(COLLECTIONS.MEDIA).doc(id), {
+            displayState: 'playing',
+            displayStateAt: now,
+          })
+        }
       }
 
       await batch.commit()

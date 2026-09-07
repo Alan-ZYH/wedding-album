@@ -171,6 +171,10 @@ export default function DisplayClient() {
   const ctrlRef = useRef(isController);    ctrlRef.current = isController
   const allowRef = useRef(settings.allowInsert !== false)
   allowRef.current = settings.allowInsert !== false
+  // Free slots in the carousel right now (pinned photos occupy slots too)
+  const freeSlots = Math.max(0, (settings.carouselSize ?? 50) - pinned.length - playingPool.length)
+  const freeSlotsRef = useRef(freeSlots)
+  freeSlotsRef.current = freeSlots
 
   // ── Advance ──────────────────────────────────────────────────
   const goNext = useCallback(() => {
@@ -183,12 +187,16 @@ export default function DisplayClient() {
 
     if (!ctrlRef.current) return
 
-    // Rule Y — a photo that has had its turn steps aside for the queue.
-    // Pinned photos never rotate out; when the queue is empty the pool
-    // simply keeps looping.
+    // Rule Y — a photo that has had its turn steps aside for the queue, but
+    // only once the pool is at capacity. While slots are free nobody needs to
+    // make room; growing the pool is left to the top-up effect below.
+    // Pinned photos never rotate out, and an empty queue just keeps looping.
     const queue = pendingRef.current
     const rotate =
-      allowRef.current && played?.displayState === 'playing' && queue.length > 0
+      allowRef.current &&
+      freeSlotsRef.current === 0 &&
+      played?.displayState === 'playing' &&
+      queue.length > 0
         ? { playedId: played.id, promoteId: queue[0].id }
         : undefined
 
@@ -225,13 +233,20 @@ export default function DisplayClient() {
   // Rule Y only rotates when a playing photo finishes its turn, so a pool that
   // starts empty (or gains slots because pinned photos were removed) would
   // never bootstrap. This tops it up one photo at a time until it is full.
-  const fillingRef = useRef(false)
+  // Guard against re-entry by remembering which photos are already in flight.
+  // A plain boolean deadlocks here: the Firestore snapshot can land before the
+  // fetch resolves, so the effect re-runs while the flag is still set and then
+  // never gets another dependency change to retry on.
+  const fillingRef = useRef<string>('')
   useEffect(() => {
     if (!isController || !allowRef.current) return
-    const slots = Math.max(0, (settings.carouselSize ?? 50) - pinned.length)
-    if (playingPool.length >= slots || pendingQueue.length === 0) return
-    if (fillingRef.current) return
-    fillingRef.current = true
+    if (freeSlots === 0 || pendingQueue.length === 0) return
+
+    const promoteIds = pendingQueue.slice(0, freeSlots).map((m) => m.id)
+    const key = promoteIds.join(',')
+    if (fillingRef.current === key) return
+    fillingRef.current = key
+
     fetch('/api/display', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -239,12 +254,10 @@ export default function DisplayClient() {
         action: 'advance',
         clientId: clientIdRef.current,
         currentMediaId: curIdRef.current ?? '',
-        rotate: { promoteId: pendingQueue[0].id },   // promote without evicting
+        rotate: { promoteIds },   // fill every free slot, no eviction
       }),
-    })
-      .catch(() => {})
-      .finally(() => { fillingRef.current = false })
-  }, [isController, pinned.length, playingPool.length, pendingQueue, settings.carouselSize])
+    }).catch(() => { fillingRef.current = '' })   // allow a retry on failure
+  }, [isController, freeSlots, pendingQueue])
 
   // Seed the position once media arrives
   useEffect(() => {
