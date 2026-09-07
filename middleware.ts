@@ -34,7 +34,12 @@ export function middleware(req: NextRequest) {
       return res
     }
 
-    return new NextResponse(null, { status: 404 })
+    // no-store so a phone that was refused before unlocking can't be shown a
+    // remembered 404 afterwards
+    return new NextResponse(null, {
+      status: 404,
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    })
   }
 
   return NextResponse.next()
