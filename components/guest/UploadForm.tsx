@@ -18,13 +18,14 @@ interface FileWithPreview {
 }
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
-const MAX_IMAGE_SIZE = 50 * 1024 * 1024   // 50 MB
+const MAX_IMAGE_MB = 30
+const MAX_IMAGE_SIZE = MAX_IMAGE_MB * 1024 * 1024
 const MAX_FILES = 3            // guest default
 const COOLDOWN_SECONDS = 30    // guest default: wait after each completed batch
 
 function validateFile(file: File): string | null {
   if (ALLOWED_IMAGE_TYPES.includes(file.type)) {
-    if (file.size > MAX_IMAGE_SIZE) return `${file.name}：圖片超過 50MB`
+    if (file.size > MAX_IMAGE_SIZE) return `${file.name}：圖片超過 ${MAX_IMAGE_MB}MB`
     return null
   }
   // HEIC by extension
@@ -248,7 +249,7 @@ export default function UploadForm({
             <div className="text-3xl mb-2">📸</div>
             <p className="text-sm font-medium text-[#7a5c2e]">點擊或拖曳上傳</p>
             <p className="text-xs text-gray-400 mt-1">
-              JPG、PNG、WEBP、HEIC ｜ 單張 ≤ 50MB
+              JPG、PNG、WEBP、HEIC ｜ 單張 ≤ {MAX_IMAGE_MB}MB
             </p>
             {cooldownSeconds > 0 ? (
               <p className="text-xs text-[#c9a84c] mt-1.5 font-medium">

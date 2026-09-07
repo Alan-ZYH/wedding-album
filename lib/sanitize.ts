@@ -25,7 +25,8 @@ export function sanitizeName(input: string): string {
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime']
-const MAX_IMAGE_SIZE = 50 * 1024 * 1024   // 50 MB
+const MAX_IMAGE_MB = 30
+const MAX_IMAGE_SIZE = MAX_IMAGE_MB * 1024 * 1024
 const MAX_VIDEO_SIZE = 500 * 1024 * 1024  // 500 MB (duration capped client-side)
 const MAX_FILES = 20
 
@@ -37,7 +38,7 @@ export interface FileValidation {
 
 export function validateFile(mimeType: string, fileSize: number): FileValidation {
   if (ALLOWED_IMAGE_TYPES.includes(mimeType)) {
-    if (fileSize > MAX_IMAGE_SIZE) return { valid: false, error: `圖片大小不可超過 50MB` }
+    if (fileSize > MAX_IMAGE_SIZE) return { valid: false, error: `圖片大小不可超過 ${MAX_IMAGE_MB}MB` }
     return { valid: true, fileType: 'photo' }
   }
   if (ALLOWED_VIDEO_TYPES.includes(mimeType)) {
