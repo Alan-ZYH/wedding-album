@@ -25,6 +25,12 @@ export default function GuestPage() {
 
   useEffect(() => {
     setMounted(true)
+    // A guest arriving by QR code must land on the header — the album name and
+    // the three tabs are the only signposts they get. iOS otherwise restores
+    // wherever the page was left, which drops them into the middle of the form
+    // with nothing on screen suggesting there is anything above it.
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+    window.scrollTo(0, 0)
     const stored = localStorage.getItem(GUEST_KEY)
     if (stored) {
       try {
@@ -56,6 +62,7 @@ export default function GuestPage() {
     const info: GuestInfo = { guestId, guestName: name }
     localStorage.setItem(GUEST_KEY, JSON.stringify(info))
     setGuest(info)
+    window.scrollTo(0, 0)
   }
 
   /**
@@ -103,7 +110,10 @@ export default function GuestPage() {
           ].map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key as typeof activeTab)}
+              onClick={() => {
+                setActiveTab(tab.key as typeof activeTab)
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
               className={`flex-1 py-2.5 text-sm font-medium transition-colors border-b-2 ${
                 activeTab === tab.key
                   ? 'border-[#c9a84c] text-[#7a5c2e]'

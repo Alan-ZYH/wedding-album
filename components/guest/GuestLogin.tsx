@@ -53,7 +53,6 @@ export default function GuestLogin({ onLogin }: Props) {
             placeholder="例：王小明"
             maxLength={50}
             className="w-full px-4 py-3 rounded-xl border border-[#e8d5a3] bg-[#fdf8f0] text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#c9a84c] focus:ring-2 focus:ring-[#c9a84c]/20 transition-all text-base"
-            autoFocus
           />
           {error && (
             <p className="mt-2 text-xs text-red-500">{error}</p>
