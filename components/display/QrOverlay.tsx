@@ -7,9 +7,12 @@ import { QrPosition } from '@/types'
 const CORNERS: Record<QrPosition, string> = {
   'top-left': 'top-6 left-6',
   'top-right': 'top-6 right-6',
-  'bottom-left': 'bottom-6 left-6',
-  'bottom-right': 'bottom-6 right-6',
+  'bottom-left': 'left-6',
+  'bottom-right': 'right-6',
 }
+
+/** Clears the mobile browser toolbar and the iPhone home indicator. */
+const BOTTOM_SAFE = 'calc(1.5rem + env(safe-area-inset-bottom, 0px))'
 
 /**
  * Standing invitation on the projection screen: guests who arrive late, or who
@@ -40,9 +43,11 @@ export default function QrOverlay({
 
   if (!dataUrl) return null
 
+  const isBottom = position.startsWith('bottom')
   return (
     <div
       className={`absolute ${CORNERS[position] ?? CORNERS['bottom-right']} z-20 pointer-events-none`}
+      style={isBottom ? { bottom: BOTTOM_SAFE } : undefined}
     >
       <div className="bg-white/95 rounded-2xl p-2.5 shadow-lg shadow-black/40">
         {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -389,7 +389,8 @@ export default function DisplayClient() {
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-screen bg-black overflow-hidden cursor-pointer"
+      className="relative w-full bg-black overflow-hidden cursor-pointer"
+      style={{ height: '100dvh' }}
       onClick={handleUserInteraction}
     >
       {loading ? (
@@ -438,7 +439,10 @@ export default function DisplayClient() {
       )}
 
       {showAudioHint && (
-        <div className="absolute bottom-20 left-0 right-0 flex justify-center z-25 pointer-events-none">
+        <div
+          className="absolute left-0 right-0 flex justify-center z-25 pointer-events-none"
+          style={{ bottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}
+        >
           <div className="bg-black/60 text-white/80 text-sm px-5 py-2 rounded-full animate-pulse">
             🔇 點擊螢幕以啟用聲音
           </div>
@@ -489,7 +493,10 @@ export default function DisplayClient() {
       </div>
 
       {sequence.length > 1 && sequence.length <= 30 && (
-        <div className="absolute bottom-0 left-0 right-0 flex gap-0.5 px-4 pb-3 opacity-30 hover:opacity-70 transition-opacity z-30">
+        <div
+          className="absolute bottom-0 left-0 right-0 flex gap-0.5 px-4 opacity-30 hover:opacity-70 transition-opacity z-30"
+          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+        >
           {sequence.map((m, i) => (
             <div
               key={m.id}
@@ -502,7 +509,10 @@ export default function DisplayClient() {
         </div>
       )}
       {sequence.length > 30 && (
-        <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 opacity-30 hover:opacity-70 transition-opacity z-30">
+        <div
+          className="absolute bottom-0 left-0 right-0 px-4 opacity-30 hover:opacity-70 transition-opacity z-30"
+          style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+        >
           <div className="h-0.5 bg-white/20 rounded-full overflow-hidden">
             <div
               className="h-full bg-[#c9a84c] rounded-full transition-all duration-500"
@@ -672,10 +682,17 @@ function Slide({
 const NAME_CORNERS: Record<NamePosition, string> = {
   'top-left': 'top-8 left-8',
   'top-right': 'top-8 right-8',
-  'bottom-left': 'bottom-10 left-8',
-  'bottom-right': 'bottom-10 right-8',
-  'bottom-center': 'bottom-10 left-1/2 -translate-x-1/2',
+  'bottom-left': 'left-8',
+  'bottom-right': 'right-8',
+  'bottom-center': 'left-1/2 -translate-x-1/2',
 }
+
+/**
+ * Bottom offset that clears the mobile browser's toolbar and the iPhone home
+ * indicator. Phones are a real display target here — the bride watches from
+ * her room — and without this the caption sits under the browser chrome.
+ */
+const BOTTOM_SAFE = 'calc(2.5rem + env(safe-area-inset-bottom, 0px))'
 
 function GuestNameBadge({
   name,
@@ -686,8 +703,12 @@ function GuestNameBadge({
   position?: NamePosition
   size?: number
 }) {
+  const isBottom = position.startsWith('bottom')
   return (
-    <div className={`absolute ${NAME_CORNERS[position] ?? NAME_CORNERS['bottom-center']} z-20`}>
+    <div
+      className={`absolute ${NAME_CORNERS[position] ?? NAME_CORNERS['bottom-center']} z-20`}
+      style={isBottom ? { bottom: BOTTOM_SAFE } : undefined}
+    >
       <div
         className="bg-black/50 backdrop-blur-sm text-white/90 rounded-full whitespace-nowrap"
         style={{
