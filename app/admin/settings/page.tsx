@@ -94,27 +94,6 @@ export default function SettingsPage() {
             onChange={(v) => update('slideTransition', v)}
           />
           <ToggleField
-            label="顯示上傳者名稱"
-            description={`例：「Photo by 王小明」`}
-            value={settings.showGuestName}
-            onChange={(v) => update('showGuestName', v)}
-          />
-          {settings.showGuestName && (
-            <>
-              <NamePositionField
-                value={settings.guestNamePosition ?? 'bottom-center'}
-                onChange={(v) => update('guestNamePosition', v)}
-              />
-              <SliderField
-                label="名稱文字大小"
-                min={14} max={48} step={2}
-                value={settings.guestNameSize ?? 20}
-                onChange={(v) => update('guestNameSize', v)}
-                display={`${settings.guestNameSize ?? 20}px`}
-              />
-            </>
-          )}
-          <ToggleField
             label="需要審核才顯示"
             description="開啟後媒體須通過管理員審核才出現在投放端"
             value={settings.requireApproval}
@@ -158,8 +137,10 @@ export default function SettingsPage() {
           />
         </Section>
 
-        {/* QR code on the projection screen */}
-        <Section title="投放端 QR Code" icon="📱">
+        {/* Both overlays live on the same screen and must not share a corner,
+            so they are chosen side by side rather than in separate sections. */}
+        <Section title="大螢幕浮層" icon="📐">
+          {/* ── QR Code ── */}
           <ToggleField
             label="顯示 QR Code"
             description="在大螢幕角落常駐，讓晚到的賓客隨時能掃描加入"
@@ -167,7 +148,7 @@ export default function SettingsPage() {
             onChange={(v) => update('showQrCode', v)}
           />
           {settings.showQrCode !== false && (
-            <>
+            <div className="pl-3 border-l-2 border-gray-100 space-y-4">
               <QrPositionField
                 value={settings.qrPosition ?? 'bottom-right'}
                 onChange={(v) => update('qrPosition', v)}
@@ -179,8 +160,42 @@ export default function SettingsPage() {
                 onChange={(v) => update('qrSize', v)}
                 display={`${settings.qrSize ?? 160}px`}
               />
-            </>
+            </div>
           )}
+
+          <div className="border-t border-gray-100 pt-4" />
+
+          {/* ── Uploader caption ── */}
+          <ToggleField
+            label="顯示上傳者名稱"
+            description={`例：「Photo by 王小明」`}
+            value={settings.showGuestName}
+            onChange={(v) => update('showGuestName', v)}
+          />
+          {settings.showGuestName && (
+            <div className="pl-3 border-l-2 border-gray-100 space-y-4">
+              <NamePositionField
+                value={settings.guestNamePosition ?? 'bottom-center'}
+                onChange={(v) => update('guestNamePosition', v)}
+              />
+              <SliderField
+                label="名稱文字大小"
+                min={14} max={48} step={2}
+                value={settings.guestNameSize ?? 20}
+                onChange={(v) => update('guestNameSize', v)}
+                display={`${settings.guestNameSize ?? 20}px`}
+              />
+            </div>
+          )}
+
+          {/* Flag the one mistake this pairing makes easy to spot */}
+          {settings.showQrCode !== false &&
+            settings.showGuestName &&
+            (settings.qrPosition ?? 'bottom-right') === settings.guestNamePosition && (
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                ⚠️ QR Code 與名稱目前在同一個角落，投影時會重疊
+              </p>
+            )}
         </Section>
 
         {/* Couple's blessing style */}
@@ -410,7 +425,6 @@ function NamePositionField({
           {btn('bottom-right', '右下')}
         </div>
       </div>
-      <p className="text-xs text-gray-400 mt-1.5">避免與 QR Code 選在同一角</p>
     </div>
   )
 }
