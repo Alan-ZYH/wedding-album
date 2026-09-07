@@ -9,6 +9,8 @@ interface Props {
   density: number    // 1-5
   fontSize: number   // px
   danmakuStyle: DanmakuStyle
+  /** Accent for blessings posted by the couple, so theirs stand out. */
+  adminColor?: string
 }
 
 interface DanmakuItem {
@@ -18,6 +20,7 @@ interface DanmakuItem {
   left: number   // % for float/fade; 0 for scroll styles
   duration: number
   color: string
+  fromAdmin: boolean
 }
 
 const COLORS = [
@@ -32,7 +35,7 @@ const COLORS = [
 
 const MAX_ACTIVE_DANMAKU = 60
 
-export default function DanmakuLayer({ messages, speed, density, fontSize, danmakuStyle }: Props) {
+export default function DanmakuLayer({ messages, speed, density, fontSize, danmakuStyle, adminColor = '#c9a84c' }: Props) {
   const [active, setActive] = useState<DanmakuItem[]>([])
   const poolRef = useRef<Message[]>([])
   const channelsRef = useRef<number[]>([]) // track occupied y positions
@@ -105,7 +108,8 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
         top: topPct,
         left: leftPct,
         duration: duration + Math.random() * 2000,
-        color,
+        color: msg.fromAdmin ? adminColor : color,
+        fromAdmin: !!msg.fromAdmin,
       }
 
       channelsRef.current = [...usedChannels, channel]
@@ -127,23 +131,44 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
 
   return (
     <div className="danmaku-container pointer-events-none">
-      {active.map((item) => (
-        <div
-          key={item.id}
-          className={`danmaku-item danmaku-${danmakuStyle}`}
-          style={{
-            top: `${item.top}%`,
-            left: `${item.left}%`,
-            fontSize: `${fontSize}px`,
-            color: item.color,
-            textShadow: '1px 1px 3px rgba(0,0,0,0.8), -1px -1px 3px rgba(0,0,0,0.8)',
-            fontFamily: 'Georgia, serif',
-            '--duration': `${item.duration}ms`,
-          } as React.CSSProperties}
-        >
-          {item.text}
-        </div>
-      ))}
+      {active.map((item) => {
+        // Custom properties don't fit CSSProperties, so the style object is
+        // assembled first and cast once.
+        const style = {
+          top: `${item.top}%`,
+          left: `${item.left}%`,
+          fontSize: `${fontSize}px`,
+          color: item.color,
+          fontFamily: 'Georgia, serif',
+          '--duration': `${item.duration}ms`,
+          // The couple's blessings get a tinted plate rather than the plain
+          // outline every other message uses, so they read as "from us"
+          // without needing a label.
+          ...(item.fromAdmin
+            ? {
+                padding: `${Math.round(fontSize * 0.28)}px ${Math.round(fontSize * 0.7)}px`,
+                borderRadius: '999px',
+                backgroundColor: `${item.color}26`,
+                border: `1px solid ${item.color}66`,
+                boxShadow: `0 0 ${Math.round(fontSize * 0.9)}px ${item.color}40`,
+                backdropFilter: 'blur(4px)',
+                fontWeight: 500,
+              }
+            : {
+                textShadow: '1px 1px 3px rgba(0,0,0,0.8), -1px -1px 3px rgba(0,0,0,0.8)',
+              }),
+        } as unknown as React.CSSProperties
+
+        return (
+          <div
+            key={item.id}
+            className={`danmaku-item danmaku-${danmakuStyle}`}
+            style={style}
+          >
+            {item.text}
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -411,6 +411,7 @@ export default function DisplayClient() {
           density={settings.danmakuDensity}
           fontSize={settings.danmakuFontSize}
           danmakuStyle={settings.danmakuStyle ?? 'scroll'}
+          adminColor={settings.adminMessageColor ?? '#c9a84c'}
         />
       )}
 

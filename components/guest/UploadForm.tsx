@@ -6,6 +6,10 @@ interface Props {
   guestId: string
   guestName: string
   onViewUploads?: () => void
+  /** Guests are capped at 3 per batch; the couple's own uploads are not. */
+  maxFiles?: number
+  /** Seconds to wait after a batch. 0 disables the cooldown entirely. */
+  cooldownSeconds?: number
 }
 
 interface FileWithPreview {
@@ -93,8 +97,8 @@ const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime']
 const MAX_IMAGE_SIZE = 50 * 1024 * 1024   // 50 MB
 const MAX_VIDEO_SIZE = 500 * 1024 * 1024  // 500 MB (duration enforced separately)
 const MAX_VIDEO_DURATION = 8              // seconds
-const MAX_FILES = 3
-const COOLDOWN_SECONDS = 30   // wait after each completed batch
+const MAX_FILES = 3            // guest default
+const COOLDOWN_SECONDS = 30    // guest default: wait after each completed batch
 
 function validateFile(file: File): string | null {
   if (ALLOWED_IMAGE_TYPES.includes(file.type)) {
@@ -147,7 +151,13 @@ function isMov(file: File): boolean {
   return file.type === 'video/quicktime' || file.name.toLowerCase().endsWith('.mov')
 }
 
-export default function UploadForm({ guestId, guestName, onViewUploads }: Props) {
+export default function UploadForm({
+  guestId,
+  guestName,
+  onViewUploads,
+  maxFiles = MAX_FILES,
+  cooldownSeconds = COOLDOWN_SECONDS,
+}: Props) {
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -176,8 +186,8 @@ export default function UploadForm({ guestId, guestName, onViewUploads }: Props)
     const errs: string[] = []
 
     for (const f of newFiles) {
-      if (combined.length >= MAX_FILES) {
-        errs.push(`最多只能選 ${MAX_FILES} 個檔案`)
+      if (combined.length >= maxFiles) {
+        errs.push(`最多只能選 ${maxFiles} 個檔案`)
         break
       }
       const err = validateFile(f)
@@ -220,7 +230,7 @@ export default function UploadForm({ guestId, guestName, onViewUploads }: Props)
 
     setFiles(combined)
     if (errs.length) setErrors(errs)
-  }, [files])
+  }, [files, maxFiles])
 
   const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) await addFiles(Array.from(e.target.files))
@@ -327,7 +337,7 @@ export default function UploadForm({ guestId, guestName, onViewUploads }: Props)
     if (succeeded > 0) {
       setDone(true)
       setFiles([])
-      setCooldown(COOLDOWN_SECONDS) // batch finished → start the wait
+      if (cooldownSeconds > 0) setCooldown(cooldownSeconds)
     }
     setUploading(false)
   }
@@ -398,9 +408,15 @@ export default function UploadForm({ guestId, guestName, onViewUploads }: Props)
             <p className="text-xs text-gray-400">
               圖片 ≤ 50MB ｜ 影片 ≤ {MAX_VIDEO_DURATION} 秒
             </p>
-            <p className="text-xs text-[#c9a84c] mt-1.5 font-medium">
-              一次最多 {MAX_FILES} 張，上傳後需等待 {COOLDOWN_SECONDS} 秒
-            </p>
+            {cooldownSeconds > 0 ? (
+              <p className="text-xs text-[#c9a84c] mt-1.5 font-medium">
+                一次最多 {maxFiles} 張，上傳後需等待 {cooldownSeconds} 秒
+              </p>
+            ) : (
+              <p className="text-xs text-[#c9a84c] mt-1.5 font-medium">
+                一次最多 {maxFiles} 張
+              </p>
+            )}
           </>
         )}
         <input

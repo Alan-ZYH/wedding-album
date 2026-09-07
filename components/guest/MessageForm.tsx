@@ -5,9 +5,11 @@ import { useState, useEffect } from 'react'
 interface Props {
   guestId: string
   guestName: string
+  /** Seconds between blessings. 0 disables the cooldown (used by the couple). */
+  cooldownSeconds?: number
 }
 
-export default function MessageForm({ guestId, guestName }: Props) {
+export default function MessageForm({ guestId, guestName, cooldownSeconds = 30 }: Props) {
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -40,7 +42,7 @@ export default function MessageForm({ guestId, guestName }: Props) {
       if (data.success) {
         setMessage('')
         setSubmitted(true)
-        setCooldown(30)
+        if (cooldownSeconds > 0) setCooldown(cooldownSeconds)
         setTimeout(() => setSubmitted(false), 3000)
       } else {
         // Server is the source of truth for cooldown / block state

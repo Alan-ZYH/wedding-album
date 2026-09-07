@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
       status: 'active',
       priority: isAdmin ? (body.priority || 1) : 1,
+      fromAdmin: isAdmin,
     }
 
     await adminDb.collection(COLLECTIONS.MESSAGES).doc(id).set(doc)

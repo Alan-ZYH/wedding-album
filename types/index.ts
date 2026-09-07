@@ -40,6 +40,7 @@ export interface Message {
   updatedAt: string
   status: 'active' | 'hidden' | 'deleted'
   priority: number // 1 = normal, 2 = high
+  fromAdmin?: boolean // posted from the admin panel — styled distinctly on screen
 }
 
 export type SlideTransition = 'fade' | 'slide' | 'zoom' | 'none'
@@ -65,6 +66,8 @@ export interface Settings {
   showQrCode: boolean       // overlay the guest QR on the projection screen
   qrPosition: QrPosition
   qrSize: number            // px, rendered size of the QR block
+  adminName: string         // name shown on photos and blessings posted by the couple
+  adminMessageColor: string // hex accent for the couple's blessings on screen
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -86,6 +89,8 @@ export const DEFAULT_SETTINGS: Settings = {
   showQrCode: true,
   qrPosition: 'bottom-right',
   qrSize: 160,
+  adminName: '新人',
+  adminMessageColor: '#c9a84c',
 }
 
 /**
