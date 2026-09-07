@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   }
 
   const res = NextResponse.redirect(new URL('/admin/dashboard', req.url))
-  res.cookies.set('admin_session', '1', {
+  res.cookies.set('admin_key_v2', '1', {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const ADMIN_COOKIE = 'admin_session'
+// Renamed from 'admin_session': the middleware used to hand that cookie to
+// anyone who merely opened /admin, and those are valid for 30 days. A new name
+// retires them all at once.
+const ADMIN_COOKIE = 'admin_key_v2'
 
 const adminCookieOptions = {
   httpOnly: true,
