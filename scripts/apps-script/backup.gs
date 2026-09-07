@@ -9,12 +9,14 @@
  */
 
 // ── 設定 ────────────────────────────────────────────────────────
+// 這個 repo 是公開的，所以識別資訊不寫在這裡 —— 貼進 Apps Script 後自行填入。
+// 實際數值見 scripts/apps-script/README.md 說明的取得方式，或問專案擁有者。
 var SOURCE = {
-  photos: '1ggOmccx-b5_JSDdfjRDcVHTRTkPQHo_w',
-  videos: '1TU-h59Ivg6GAIuv58zfhXz1ykupI-f6X',
+  photos: 'PASTE_PHOTOS_FOLDER_ID',
+  videos: 'PASTE_VIDEOS_FOLDER_ID',
 };
-var BACKUP_FOLDER_ID = '1IJsox9j7uMzKqWiZFRuJ2R24FfjqXerT';   // 個人雲端硬碟「備份相本」
-var SITE = 'https://wedding-album-mu.vercel.app';
+var BACKUP_FOLDER_ID = 'PASTE_BACKUP_FOLDER_ID';   // 個人雲端硬碟「備份相本」
+var SITE = 'https://PASTE_YOUR_SITE.vercel.app';
 
 // Apps Script 單次執行上限 6 分鐘；留餘裕收尾，未完成的部分下次接續。
 var TIME_BUDGET_MS = 4.5 * 60 * 1000;

@@ -7,9 +7,9 @@ export const dynamic = 'force-dynamic'
 /** Strip sensitive fields before sending settings to clients. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sanitizeSettings(s: Record<string, any>) {
-  // adminPassword is stored in the same Firestore document but must never be
-  // returned via this public API endpoint.
-  const { adminPassword: _pw, ...safe } = s
+  // These live in the same Firestore document but must never leave the server
+  // through this endpoint, which is public.
+  const { adminPassword: _pw, adminAccessKey: _key, ...safe } = s
   return safe
 }
 
@@ -33,6 +33,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json()
     // Prevent accidental overwrite of adminPassword via this endpoint
     delete body.adminPassword
+    delete body.adminAccessKey
     await updateSettings(body)
     const updated = await getSettings()
     return NextResponse.json({ success: true, data: sanitizeSettings(updated as never) })

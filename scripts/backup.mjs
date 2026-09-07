@@ -11,8 +11,8 @@
  *   node scripts/backup.mjs nas        # 把本機那份同步到 NAS（選用）
  *
  * 備份位置：專案資料夾底下的「備份相本/」
- *   由 Google Drive 桌面版自動同步到個人雲端硬碟：
- *   https://drive.google.com/drive/folders/1IJsox9j7uMzKqWiZFRuJ2R24FfjqXerT
+ *   由 Google Drive 桌面版自動同步到個人雲端硬碟（資料夾 ID 見 .env.local
+ *   的 BACKUP_FOLDER_ID；這個 repo 是公開的，識別資訊不寫在原始碼裡）
  *
  * 為什麼寫本機而不是用 API 複製到雲端：
  *   服務帳號本身沒有儲存空間配額，無法在個人雲端硬碟建立檔案（403
@@ -35,7 +35,9 @@ import { google } from 'googleapis'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // 專案底下的同步資料夾；Drive 桌面版會把它上傳到個人雲端硬碟「備份相本」
 const BACKUP_DIR = join(__dirname, '..', '備份相本')
-const BACKUP_FOLDER_URL = 'https://drive.google.com/drive/folders/1IJsox9j7uMzKqWiZFRuJ2R24FfjqXerT'
+const BACKUP_FOLDER_URL = process.env.BACKUP_FOLDER_ID
+  ? `https://drive.google.com/drive/folders/${process.env.BACKUP_FOLDER_ID}`
+  : '（見 .env.local 的 BACKUP_FOLDER_ID）'
 const LOCAL_DIR = join(homedir(), 'wedding-backup')
 const NAS_HOST = 'alan-nas'
 const NAS_DEST = '~/wedding-backup/'

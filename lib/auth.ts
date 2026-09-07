@@ -6,11 +6,11 @@ const ADMIN_COOKIE = 'admin_session'
 /**
  * Admin authentication uses the URL-secrecy model — there is no password.
  *
- * The middleware grants an `admin_session` cookie to anyone who visits an
- * /admin page. Admin-only API routes call this to check for that cookie,
- * so guests who only ever received the /guest link cannot perform admin
- * actions (delete others' media, change settings, …) even by calling the
- * API directly.
+ * Visiting /api/admin/unlock?key=… with the right key grants an
+ * `admin_session` cookie; the middleware then lets that device into /admin.
+ * Admin-only API routes call this to check for the same cookie, so guests who
+ * only ever received the /guest link cannot perform admin actions (delete
+ * others' media, change settings, …) even by calling the API directly.
  */
 export async function isAdminAuthenticated(req?: NextRequest): Promise<boolean> {
   try {

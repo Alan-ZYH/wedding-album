@@ -7,6 +7,11 @@
 1. 用 `alan.z@hiyes.tw` 登入，開啟 <https://script.google.com>
 2. 左上「**新專案**」，把專案命名為「婚禮相簿備份」
 3. 刪掉編輯器裡預設的程式碼，貼上 `backup.gs` 的全部內容
+   - 最上方四個 `PASTE_...` 需要填入實際值（本 repo 是公開的，所以不寫在程式碼裡）：
+     - `SITE`：你的正式網址
+     - `BACKUP_FOLDER_ID`：個人雲端硬碟「備份相本」資料夾網址末端的那串 ID
+     - `SOURCE.photos` / `SOURCE.videos`：共用雲端硬碟 `Wedding Uploads/` 底下
+       兩個子資料夾的 ID（同樣從網址取得）
 4. 按 💾 儲存（或 Cmd+S）
    - **一定要先存檔**，否則上方函式選單會一直顯示「沒有函式」、「執行」也是灰的。
      Apps Script 要存檔後才會解析程式碼
@@ -21,7 +26,7 @@
 ## 確認有在運作
 
 - 左側「**執行項目**」可看每次執行的紀錄與結果
-- 或直接開 [備份相本](https://drive.google.com/drive/folders/1IJsox9j7uMzKqWiZFRuJ2R24FfjqXerT) 看檔案數量
+- 或直接開 備份相本資料夾 看檔案數量
 
 ## 備份內容
 
