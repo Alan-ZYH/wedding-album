@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Settings, DEFAULT_SETTINGS, SlideTransition, DanmakuStyle, QrPosition } from '@/types'
+import { Settings, DEFAULT_SETTINGS, SlideTransition, DanmakuStyle, QrPosition, NamePosition } from '@/types'
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
@@ -99,6 +99,21 @@ export default function SettingsPage() {
             value={settings.showGuestName}
             onChange={(v) => update('showGuestName', v)}
           />
+          {settings.showGuestName && (
+            <>
+              <NamePositionField
+                value={settings.guestNamePosition ?? 'bottom-center'}
+                onChange={(v) => update('guestNamePosition', v)}
+              />
+              <SliderField
+                label="名稱文字大小"
+                min={14} max={48} step={2}
+                value={settings.guestNameSize ?? 20}
+                onChange={(v) => update('guestNameSize', v)}
+                display={`${settings.guestNameSize ?? 20}px`}
+              />
+            </>
+          )}
           <ToggleField
             label="需要審核才顯示"
             description="開啟後媒體須通過管理員審核才出現在投放端"
@@ -359,6 +374,43 @@ function ColorField({
         </label>
         <code className="text-xs text-gray-400 ml-auto">{value}</code>
       </div>
+    </div>
+  )
+}
+
+function NamePositionField({
+  value, onChange,
+}: {
+  value: NamePosition
+  onChange: (v: NamePosition) => void
+}) {
+  const btn = (pos: NamePosition, label: string, extra = '') => (
+    <button
+      key={pos}
+      onClick={() => onChange(pos)}
+      className={`rounded-lg text-xs font-medium transition-all py-2 ${extra} ${
+        value === pos ? 'bg-[#c9a84c] text-white' : 'bg-white/10 text-white/50 hover:bg-white/20'
+      }`}
+    >
+      {label}
+    </button>
+  )
+  return (
+    <div>
+      <p className="text-sm font-medium text-gray-700 mb-2">名稱顯示位置</p>
+      {/* Laid out as the screen so the choice maps to what you see */}
+      <div className="bg-gray-900 rounded-xl aspect-video max-w-xs p-2 flex flex-col justify-between gap-2">
+        <div className="grid grid-cols-2 gap-2">
+          {btn('top-left', '左上')}
+          {btn('top-right', '右上')}
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {btn('bottom-left', '左下')}
+          {btn('bottom-center', '正下')}
+          {btn('bottom-right', '右下')}
+        </div>
+      </div>
+      <p className="text-xs text-gray-400 mt-1.5">避免與 QR Code 選在同一角</p>
     </div>
   )
 }

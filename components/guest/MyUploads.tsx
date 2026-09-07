@@ -174,13 +174,15 @@ export default function MyUploads({ guestId }: Props) {
               </div>
             )}
 
-            {/* Delete button */}
+            {/* Delete — always visible: hover-reveal is invisible on phones,
+                which is the only device most guests will ever use this on. */}
             <button
               onClick={() => handleDelete(item.id)}
               disabled={deleting === item.id}
-              className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs transition-colors opacity-0 group-hover:opacity-100"
+              aria-label="移除這個檔案"
+              className="absolute bottom-1.5 right-1.5 bg-black/70 hover:bg-red-600 active:bg-red-600 text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
             >
-              {deleting === item.id ? '...' : '×'}
+              {deleting === item.id ? '移除中' : <><span>🗑</span><span>移除</span></>}
             </button>
           </div>
         ))}

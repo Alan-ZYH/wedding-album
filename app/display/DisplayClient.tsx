@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { collection, doc, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { Media, Message, Settings, DEFAULT_SETTINGS, PlaybackState } from '@/types'
+import { Media, Message, Settings, DEFAULT_SETTINGS, PlaybackState, NamePosition } from '@/types'
 import DanmakuLayer from '@/components/display/DanmakuLayer'
 import QrOverlay from '@/components/display/QrOverlay'
 
@@ -266,18 +266,43 @@ export default function DisplayClient() {
     }
   }, [isController, localCurrentId, sequence])
 
-  // ── Auto-advance timer (photos only; videos advance on 'ended') ──
-  // Keyed on the current item's identity, never on the media array, so a guest
-  // uploading mid-slide cannot restart the countdown.
+  // ── Auto-advance (photos only; videos advance on 'ended') ──
+  // A watchdog that compares elapsed time against the interval, rather than a
+  // single setTimeout. Browsers throttle timers hard in background tabs and in
+  // Safari's low-power mode, which would strand a lone timeout — a poll that
+  // asks "has this slide had its time?" catches up as soon as it next runs.
   const currentSlideId = current?.id
   const currentIsVideo = current?.fileType === 'video'
+  const slideStartedAtRef = useRef(Date.now())
   useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current)
+    slideStartedAtRef.current = Date.now()
+  }, [currentSlideId])
+
+  useEffect(() => {
     if (!isController || !currentSlideId) return
     if (currentIsVideo && settings.playVideos) return
-    timerRef.current = setTimeout(() => goNextRef.current(), settings.slideInterval * 1000)
-    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
+    const holdMs = Math.max(1, settings.slideInterval) * 1000
+    const tick = () => {
+      if (Date.now() - slideStartedAtRef.current >= holdMs) {
+        slideStartedAtRef.current = Date.now()   // stop a backlog from firing repeatedly
+        goNextRef.current()
+      }
+    }
+    timerRef.current = setInterval(tick, 500) as unknown as ReturnType<typeof setTimeout>
+    return () => { if (timerRef.current) clearInterval(timerRef.current as unknown as ReturnType<typeof setInterval>) }
   }, [isController, currentSlideId, currentIsVideo, settings.slideInterval, settings.playVideos])
+
+  // Coming back to a throttled tab should resume immediately, not wait for the
+  // next poll after the browser un-throttles.
+  useEffect(() => {
+    const wake = () => {
+      if (!ctrlRef.current) return
+      if (document.visibilityState !== 'visible') return
+      slideStartedAtRef.current = Date.now()
+    }
+    document.addEventListener('visibilitychange', wake)
+    return () => document.removeEventListener('visibilitychange', wake)
+  }, [])
 
   const skipVideo = useCallback((id: string) => {
     setSessionSkipped((s) => new Set(s).add(id))
@@ -593,7 +618,13 @@ function Slide({
               className="w-full h-full object-contain"
             />
           )}
-          {settings.showGuestName && active && <GuestNameBadge name={item.guestName} />}
+          {settings.showGuestName && active && (
+            <GuestNameBadge
+              name={item.guestName}
+              position={settings.guestNamePosition}
+              size={settings.guestNameSize}
+            />
+          )}
         </div>
       </div>
     )
@@ -615,13 +646,33 @@ function Slide({
   )
 }
 
-function GuestNameBadge({ name }: { name: string }) {
-  // Bottom centre: the corners are where the QR overlay lives, and centring
-  // reads as a caption for the photo rather than a stray label.
+const NAME_CORNERS: Record<NamePosition, string> = {
+  'top-left': 'top-8 left-8',
+  'top-right': 'top-8 right-8',
+  'bottom-left': 'bottom-10 left-8',
+  'bottom-right': 'bottom-10 right-8',
+  'bottom-center': 'bottom-10 left-1/2 -translate-x-1/2',
+}
+
+function GuestNameBadge({
+  name,
+  position = 'bottom-center',
+  size = 20,
+}: {
+  name: string
+  position?: NamePosition
+  size?: number
+}) {
   return (
-    <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20">
-      <div className="bg-black/50 backdrop-blur-sm text-white/90 text-lg px-6 py-2 rounded-full whitespace-nowrap">
-        {name}
+    <div className={`absolute ${NAME_CORNERS[position] ?? NAME_CORNERS['bottom-center']} z-20`}>
+      <div
+        className="bg-black/50 backdrop-blur-sm text-white/90 rounded-full whitespace-nowrap"
+        style={{
+          fontSize: `${size}px`,
+          padding: `${Math.round(size * 0.4)}px ${Math.round(size * 1.1)}px`,
+        }}
+      >
+        Photo by {name}
       </div>
     </div>
   )

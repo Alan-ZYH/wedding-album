@@ -46,6 +46,8 @@ export interface Message {
 export type SlideTransition = 'fade' | 'slide' | 'zoom' | 'none'
 export type DanmakuStyle = 'scroll' | 'scroll-reverse' | 'float' | 'fade'
 export type QrPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+/** Same corners as the QR overlay, plus the centred caption position. */
+export type NamePosition = QrPosition | 'bottom-center'
 
 export interface Settings {
   albumName: string         // event/album title shown on guest page
@@ -68,6 +70,8 @@ export interface Settings {
   qrSize: number            // px, rendered size of the QR block
   adminName: string         // name shown on photos and blessings posted by the couple
   adminMessageColor: string // hex accent for the couple's blessings on screen
+  guestNamePosition: NamePosition  // where "Photo by …" sits on screen
+  guestNameSize: number            // px font size for that caption
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -91,6 +95,8 @@ export const DEFAULT_SETTINGS: Settings = {
   qrSize: 160,
   adminName: '新人',
   adminMessageColor: '#c9a84c',
+  guestNamePosition: 'bottom-center',
+  guestNameSize: 20,
 }
 
 /**
