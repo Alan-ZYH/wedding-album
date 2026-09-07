@@ -206,28 +206,6 @@ export default function SettingsPage() {
             )}
         </Section>
 
-        {/* Couple's blessing style */}
-        <Section title="新人祝福樣式" icon="💍">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-700">顯示名稱</p>
-              <p className="text-xs text-gray-400 mt-0.5">新人上傳的照片與祝福會用這個名字</p>
-            </div>
-            <input
-              type="text"
-              value={settings.adminName ?? DEFAULT_SETTINGS.adminName}
-              onChange={(e) => update('adminName', e.target.value.slice(0, 20))}
-              className="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#c9a84c] w-40"
-              placeholder="新人"
-            />
-          </div>
-          <ColorField
-            value={settings.adminMessageColor ?? DEFAULT_SETTINGS.adminMessageColor}
-            name={settings.adminName ?? DEFAULT_SETTINGS.adminName}
-            onChange={(v) => update('adminMessageColor', v)}
-          />
-        </Section>
-
         {/* Danmaku section */}
         <Section title="彈幕設定" icon="💬">
           <ToggleField
@@ -334,68 +312,6 @@ function DanmakuStyleField({
             <p className="text-[10px] text-gray-400 mt-0.5">{opt.desc}</p>
           </button>
         ))}
-      </div>
-    </div>
-  )
-}
-
-const PRESET_COLORS = [
-  '#c9a84c', // 香檳金
-  '#e8b4b8', // 玫瑰粉
-  '#a8c5b5', // 霧綠
-  '#b8c4de', // 霧藍
-  '#d4a5a5', // 藕紫
-  '#ffffff', // 純白
-]
-
-function ColorField({
-  value, name, onChange,
-}: {
-  value: string
-  name: string
-  onChange: (v: string) => void
-}) {
-  return (
-    <div>
-      <p className="text-sm font-medium text-gray-700 mb-2">祝福色塊顏色</p>
-
-      {/* Preview against the projection background, not the admin's white page */}
-      <div className="bg-gray-900 rounded-xl py-5 flex justify-center mb-3">
-        <span
-          className="px-5 py-2 rounded-full text-base font-medium"
-          style={{
-            backgroundColor: `${value}26`,
-            color: value,
-            border: `1px solid ${value}66`,
-            boxShadow: `0 0 20px ${value}40`,
-          }}
-        >
-          {name || '新人'}：新婚快樂
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        {PRESET_COLORS.map((c) => (
-          <button
-            key={c}
-            onClick={() => onChange(c)}
-            title={c}
-            className={`w-9 h-9 rounded-full border-2 transition-transform hover:scale-110 ${
-              value.toLowerCase() === c.toLowerCase() ? 'border-gray-800 scale-110' : 'border-gray-200'
-            }`}
-            style={{ backgroundColor: c }}
-          />
-        ))}
-        <label className="flex items-center gap-2 ml-1 cursor-pointer">
-          <input
-            type="color"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-9 h-9 rounded-full border-2 border-gray-200 cursor-pointer p-0 bg-transparent"
-          />
-          <span className="text-xs text-gray-400">自訂</span>
-        </label>
-        <code className="text-xs text-gray-400 ml-auto">{value}</code>
       </div>
     </div>
   )

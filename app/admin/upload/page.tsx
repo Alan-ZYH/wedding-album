@@ -9,6 +9,13 @@ import MessageForm from '@/components/guest/MessageForm'
  *  the guest list (recordGuestAction is skipped for admins). */
 const ADMIN_GUEST_ID = 'admin'
 
+const PRESET_COLORS = [
+  '#c9a84c', // 香檳金
+  '#e8b4b8', // 玫瑰粉
+  '#a8c5b5', // 霧綠
+  '#b8c4de', // 霧藍
+]
+
 export default function AdminUploadPage() {
   const [tab, setTab] = useState<'upload' | 'message'>('upload')
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
@@ -26,6 +33,19 @@ export default function AdminUploadPage() {
   }, [])
 
   const adminName = settings.adminName || DEFAULT_SETTINGS.adminName
+
+  /** Colour is saved as soon as it is picked — the preview above is the whole
+   *  point, and a separate save button would just be a step between the two. */
+  const saveColor = async (color: string) => {
+    setSettings((s) => ({ ...s, adminMessageColor: color }))
+    try {
+      await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminMessageColor: color }),
+      })
+    } catch { /* the next save, or the settings page, will catch up */ }
+  }
 
   const saveName = async () => {
     const next = nameDraft.trim().slice(0, 20)
@@ -144,26 +164,72 @@ export default function AdminUploadPage() {
             cooldownSeconds={0}
             fromAdmin
           />
-          <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-            <p className="text-xs text-gray-500 mb-2">大螢幕上的呈現方式</p>
-            <div className="bg-gray-900 rounded-lg py-4 px-3 flex justify-center">
-              <span
-                className="px-4 py-1.5 rounded-full text-sm font-medium"
-                style={{
-                  backgroundColor: `${settings.adminMessageColor ?? '#c9a84c'}26`,
-                  color: settings.adminMessageColor ?? '#c9a84c',
-                  border: `1px solid ${settings.adminMessageColor ?? '#c9a84c'}66`,
-                }}
-              >
-                {adminName}：新婚快樂
-              </span>
-            </div>
-            <p className="text-xs text-gray-400 mt-2">
-              顏色可在「設定 → 新人祝福樣式」調整
-            </p>
-          </div>
+          <BlessingStyle
+            name={adminName}
+            color={settings.adminMessageColor ?? DEFAULT_SETTINGS.adminMessageColor}
+            onChange={saveColor}
+          />
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * The couple's blessings get a tinted plate on the projection so they read as
+ * the hosts speaking rather than another guest. This lives beside the message
+ * box rather than on the settings page: the colour only means anything next to
+ * the preview of what it will look like.
+ */
+function BlessingStyle({
+  name, color, onChange,
+}: {
+  name: string
+  color: string
+  onChange: (c: string) => void
+}) {
+  return (
+    <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+      <p className="text-sm font-medium text-gray-700 mb-2">大螢幕上的呈現方式</p>
+
+      {/* Previewed on the projection's dark ground, not this white page */}
+      <div className="bg-gray-900 rounded-lg py-5 px-3 flex justify-center mb-3">
+        <span
+          className="px-5 py-2 rounded-full text-base font-medium"
+          style={{
+            backgroundColor: `${color}26`,
+            color,
+            border: `1px solid ${color}66`,
+            boxShadow: `0 0 20px ${color}40`,
+          }}
+        >
+          {name || '新人'}：新婚快樂
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        {PRESET_COLORS.map((c) => (
+          <button
+            key={c}
+            onClick={() => onChange(c)}
+            title={c}
+            className={`w-9 h-9 rounded-full border-2 transition-transform hover:scale-110 ${
+              color.toLowerCase() === c.toLowerCase() ? 'border-gray-800 scale-110' : 'border-gray-200'
+            }`}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+        <label className="flex items-center gap-2 ml-1 cursor-pointer">
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-9 h-9 rounded-full border-2 border-gray-200 cursor-pointer p-0 bg-transparent"
+          />
+          <span className="text-xs text-gray-400">自訂</span>
+        </label>
+        <code className="text-xs text-gray-400 ml-auto">{color}</code>
+      </div>
     </div>
   )
 }
