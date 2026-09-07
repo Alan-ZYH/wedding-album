@@ -22,7 +22,7 @@ function MediaPageContent() {
   const [preview, setPreview] = useState<Media | null>(null)
   const [processing, setProcessing] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
-  const realNames = useRealNames()
+  const realNames = useRealNames(media.map((m) => m.guestId))
 
   // Real-time listener — updates instantly when guests upload
   useEffect(() => {

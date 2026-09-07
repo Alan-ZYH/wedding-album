@@ -15,7 +15,7 @@ export default function MessagesPage() {
   const [addingNew, setAddingNew] = useState(false)
   const [filter, setFilter] = useState('')
 
-  const realNames = useRealNames()
+  const realNames = useRealNames(messages.map((m) => m.guestId))
 
   // Live, like 媒體管理: a blessing posted from the floor should appear here
   // without the couple thinking to reload. Sorting is done in memory because
