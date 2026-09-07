@@ -615,9 +615,13 @@ function Slide({
 }
 
 function GuestNameBadge({ name }: { name: string }) {
+  // Bottom centre: the corners are where the QR overlay lives, and centring
+  // reads as a caption for the photo rather than a stray label.
   return (
-    <div className="absolute bottom-8 right-6 bg-black/50 backdrop-blur-sm text-white/80 text-sm px-3 py-1.5 rounded-full z-20">
-      Photo by {name}
+    <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20">
+      <div className="bg-black/50 backdrop-blur-sm text-white/90 text-lg px-6 py-2 rounded-full whitespace-nowrap">
+        {name}
+      </div>
     </div>
   )
 }

@@ -18,7 +18,7 @@ function MediaPageContent() {
     type: searchParams.get('type') || 'all',
     pending: searchParams.get('pending') === 'true',
     search: '',
-    state: 'all' as 'all' | DisplayState,
+    state: 'all' as 'all' | DisplayState | 'deleted',
   })
   const [preview, setPreview] = useState<Media | null>(null)
   const [processing, setProcessing] = useState<string | null>(null)
@@ -40,17 +40,32 @@ function MediaPageContent() {
     setVisibleCount(PAGE_SIZE)
   }, [filter.type, filter.pending, filter.search, filter.state])
 
-  const filtered = media.filter((m) => {
+  // 「刪除」是 status，其餘四種是 displayState；預設不顯示已刪除的
+  const matchesState = (m: Media, state: typeof filter.state) => {
+    if (state === 'deleted') return m.status === 'deleted'
     if (m.status === 'deleted') return false
+    return state === 'all' || (m.displayState ?? 'pending') === state
+  }
+
+  const filtered = media.filter((m) => {
+    if (!matchesState(m, filter.state)) return false
     if (filter.type !== 'all' && m.fileType !== filter.type) return false
     if (filter.pending && m.approved) return false
-    if (filter.state !== 'all' && (m.displayState ?? 'pending') !== filter.state) return false
     if (filter.search) {
       const s = filter.search.toLowerCase()
       if (!m.guestName.toLowerCase().includes(s) && !m.fileName.toLowerCase().includes(s)) return false
     }
     return true
   })
+
+  const counts = {
+    all: media.filter((m) => m.status !== 'deleted').length,
+    pinned: media.filter((m) => m.status !== 'deleted' && m.displayState === 'pinned').length,
+    playing: media.filter((m) => m.status !== 'deleted' && m.displayState === 'playing').length,
+    pending: media.filter((m) => m.status !== 'deleted' && (m.displayState ?? 'pending') === 'pending').length,
+    masked: media.filter((m) => m.status !== 'deleted' && m.displayState === 'masked').length,
+    deleted: media.filter((m) => m.status === 'deleted').length,
+  }
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -155,6 +170,33 @@ function MediaPageContent() {
         </div>
       </div>
 
+      {/* State filter — one tap per state, with live counts */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-2 mb-3 flex flex-wrap gap-1">
+        {([
+          { st: 'all',     label: '全部', icon: '' },
+          { st: 'pinned',  label: '置頂', icon: '📌' },
+          { st: 'playing', label: '播放', icon: '▶️' },
+          { st: 'pending', label: '待播', icon: '⏳' },
+          { st: 'masked',  label: '遮蔽', icon: '⬜' },
+          { st: 'deleted', label: '刪除', icon: '❌' },
+        ] as { st: typeof filter.state; label: string; icon: string }[]).map((t) => (
+          <button
+            key={t.st}
+            onClick={() => setFilter((f) => ({ ...f, state: t.st }))}
+            className={`flex-1 min-w-20 px-3 py-2 rounded-xl text-sm transition-colors ${
+              filter.state === t.st
+                ? 'bg-[#c9a84c] text-white font-medium'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            {t.icon && <span className="mr-1">{t.icon}</span>}{t.label}
+            <span className={`ml-1.5 text-xs ${filter.state === t.st ? 'text-white/70' : 'text-gray-400'}`}>
+              {counts[t.st]}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-gray-200 p-4 mb-4 flex flex-wrap gap-3">
         <input
@@ -172,17 +214,6 @@ function MediaPageContent() {
           <option value="all">全部類型</option>
           <option value="photo">照片</option>
           <option value="video">影片</option>
-        </select>
-        <select
-          value={filter.state}
-          onChange={(e) => setFilter((f) => ({ ...f, state: e.target.value as 'all' | DisplayState }))}
-          className="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none"
-        >
-          <option value="all">全部狀態</option>
-          <option value="pinned">📌 置頂</option>
-          <option value="playing">▶️ 播放中</option>
-          <option value="pending">⏳ 待播</option>
-          <option value="masked">⬜ 已遮蔽</option>
         </select>
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
@@ -305,50 +336,51 @@ function MediaPageContent() {
               </a>
             </div>
 
-            {/* Action buttons inside modal */}
-            <div className="flex flex-wrap justify-center gap-3 mt-4">
+            {/* Carousel state — same five controls as the card */}
+            <div className="flex flex-wrap justify-center gap-2 mt-4">
+              {([
+                { st: 'pinned',  icon: '📌', label: '置頂' },
+                { st: 'playing', icon: '▶️', label: '播放' },
+                { st: 'pending', icon: '⏳', label: '待播' },
+                { st: 'masked',  icon: '⬜', label: '遮蔽' },
+              ] as { st: DisplayState; icon: string; label: string }[]).map((b) => {
+                const isCurrent = (preview.displayState ?? 'pending') === b.st
+                return (
+                  <button
+                    key={b.st}
+                    onClick={() => {
+                      if (isCurrent) return
+                      updateMedia(preview.id, { displayState: b.st, displayError: false })
+                      setPreview((p) => p ? { ...p, displayState: b.st, displayError: false } : null)
+                    }}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                      isCurrent
+                        ? 'bg-[#c9a84c] text-white'
+                        : 'bg-white/10 text-white/70 hover:bg-white/20'
+                    }`}
+                  >
+                    {b.icon} {b.label}
+                  </button>
+                )
+              })}
+              <button
+                onClick={() => { deleteMedia(preview.id); setPreview(null) }}
+                className="px-4 py-2 rounded-xl text-sm font-medium bg-red-700 hover:bg-red-600 text-white transition-colors"
+              >
+                ❌ 刪除
+              </button>
+            </div>
+
+            {/* Approval is separate from where the photo sits in the carousel */}
+            <div className="flex justify-center mt-2">
               <button
                 onClick={() => {
                   updateMedia(preview.id, { approved: !preview.approved })
                   setPreview((p) => p ? { ...p, approved: !p.approved } : null)
                 }}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                  preview.approved
-                    ? 'bg-gray-600 hover:bg-gray-500 text-white'
-                    : 'bg-green-600 hover:bg-green-500 text-white'
-                }`}
+                className="px-4 py-1.5 rounded-lg text-xs text-white/60 hover:text-white hover:bg-white/10 transition-colors"
               >
-                {preview.approved ? '取消通過' : '✓ 通過'}
-              </button>
-              <button
-                onClick={() => {
-                  const newStatus = preview.status === 'hidden' ? 'active' : 'hidden'
-                  updateMedia(preview.id, { status: newStatus })
-                  setPreview((p) => p ? { ...p, status: newStatus } : null)
-                }}
-                className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-600 hover:bg-gray-500 text-white transition-colors"
-              >
-                {preview.status === 'hidden' ? '👁 顯示' : '🙈 隱藏'}
-              </button>
-              {preview.displayError && (
-                <button
-                  onClick={() => {
-                    updateMedia(preview.id, { displayError: false })
-                    setPreview((p) => p ? { ...p, displayError: false } : null)
-                  }}
-                  className="px-4 py-2 rounded-xl text-sm font-medium bg-orange-600 hover:bg-orange-500 text-white transition-colors"
-                >
-                  🔄 清除錯誤
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  deleteMedia(preview.id)
-                  setPreview(null)
-                }}
-                className="px-4 py-2 rounded-xl text-sm font-medium bg-red-700 hover:bg-red-600 text-white transition-colors"
-              >
-                🗑 刪除
+                {preview.approved ? '取消審核通過' : '✓ 審核通過'}
               </button>
             </div>
           </div>
