@@ -15,9 +15,7 @@ function MediaPageContent() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState({
-    type: searchParams.get('type') || 'all',
     pending: searchParams.get('pending') === 'true',
-    search: '',
     state: 'all' as 'all' | DisplayState | 'deleted',
   })
   const [preview, setPreview] = useState<Media | null>(null)
@@ -38,7 +36,7 @@ function MediaPageContent() {
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
-  }, [filter.type, filter.pending, filter.search, filter.state])
+  }, [filter.pending, filter.state])
 
   // 「刪除」是 status，其餘四種是 displayState；預設不顯示已刪除的
   const matchesState = (m: Media, state: typeof filter.state) => {
@@ -51,12 +49,8 @@ function MediaPageContent() {
   const orderOf = (m: Media) => m.sortOrder ?? Number.MAX_SAFE_INTEGER
   const filtered = media.filter((m) => {
     if (!matchesState(m, filter.state)) return false
-    if (filter.type !== 'all' && m.fileType !== filter.type) return false
+    // ?pending=true from the dashboard still narrows to unapproved media
     if (filter.pending && m.approved) return false
-    if (filter.search) {
-      const s = filter.search.toLowerCase()
-      if (!m.guestName.toLowerCase().includes(s) && !m.fileName.toLowerCase().includes(s)) return false
-    }
     return true
   }).sort((a, b) => {
     const d = orderOf(a) - orderOf(b)
@@ -143,8 +137,18 @@ function MediaPageContent() {
     finally { setProcessing(null) }
   }
 
-  const deleteMedia = async (id: string) => {
-    if (!confirm('確定永久刪除？此操作也會刪除 Google Drive 中的檔案。')) return
+  // ❌ moves a photo to the 刪除 tab and off the screen. The Google Drive file
+  // stays: on the wedding day a mis-tap must be undoable, and the backup runs
+  // off Drive, so purging here would lose the photo from the album for good.
+  const trashMedia = (id: string) =>
+    updateMedia(id, { status: 'deleted', displayState: 'masked' })
+
+  const restoreMedia = (id: string) =>
+    updateMedia(id, { status: 'active', displayState: 'pending' })
+
+  // The only path that touches Google Drive — reachable from the 刪除 tab alone
+  const purgeMedia = async (id: string) => {
+    if (!confirm('確定永久刪除？這會一併刪除 Google Drive 裡的檔案，無法復原。')) return
     setProcessing(id)
     try {
       const res = await fetch(`/api/media/${id}`, { method: 'DELETE' })
@@ -188,23 +192,7 @@ function MediaPageContent() {
   const batchApprove = () => batchUpdate({ approved: true })
   const batchHide = () => batchUpdate({ status: 'hidden' })
 
-  const batchDelete = async () => {
-    if (!confirm(`確定永久刪除 ${selected.size} 個檔案？此操作也會刪除 Google Drive 中的檔案。`)) return
-    const ids = [...selected]
-    setProcessing('batch')
-    try {
-      await runBatch(ids, async (id) => {
-        const res = await fetch(`/api/media/${id}`, { method: 'DELETE' })
-        if ((await res.json()).success) {
-          setMedia((prev) => prev.filter((m) => m.id !== id))
-        }
-      })
-    } catch {}
-    finally {
-      setProcessing(null)
-      setSelected(new Set())
-    }
-  }
+  const batchDelete = () => batchUpdate({ status: 'deleted', displayState: 'masked' })
 
   if (loading) return <div className="text-center py-16 text-gray-400">載入中...</div>
 
@@ -247,35 +235,6 @@ function MediaPageContent() {
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 mb-4 flex flex-wrap gap-3">
-        <input
-          type="text"
-          placeholder="搜尋名稱或檔案名..."
-          value={filter.search}
-          onChange={(e) => setFilter((f) => ({ ...f, search: e.target.value }))}
-          className="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#c9a84c] flex-1 min-w-40"
-        />
-        <select
-          value={filter.type}
-          onChange={(e) => setFilter((f) => ({ ...f, type: e.target.value }))}
-          className="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none"
-        >
-          <option value="all">全部類型</option>
-          <option value="photo">照片</option>
-          <option value="video">影片</option>
-        </select>
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={filter.pending}
-            onChange={(e) => setFilter((f) => ({ ...f, pending: e.target.checked }))}
-            className="accent-[#c9a84c]"
-          />
-          僅顯示待審核
-        </label>
-      </div>
-
       {/* Batch actions */}
       {selected.size > 0 && (
         <div className="bg-[#c9a84c]/10 border border-[#c9a84c]/30 rounded-xl p-3 mb-4 flex items-center gap-3">
@@ -283,6 +242,7 @@ function MediaPageContent() {
           <button onClick={batchApprove} className="text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg hover:bg-green-600">批次通過</button>
           <button onClick={batchHide} className="text-xs bg-gray-500 text-white px-3 py-1.5 rounded-lg hover:bg-gray-600">批次隱藏</button>
           <button onClick={batchDelete} className="text-xs bg-red-500 text-white px-3 py-1.5 rounded-lg hover:bg-red-600">批次刪除</button>
+          <span className="text-xs text-gray-400">（移到「刪除」，雲端檔案保留）</span>
           <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:text-gray-700 ml-auto">取消</button>
         </div>
       )}
@@ -324,7 +284,9 @@ function MediaPageContent() {
                 onPreview={() => setPreview(item)}
                 onApprove={() => updateMedia(item.id, { approved: !item.approved })}
                 onHide={() => updateMedia(item.id, { status: item.status === 'hidden' ? 'active' : 'hidden' })}
-                onDelete={() => deleteMedia(item.id)}
+                onDelete={() => trashMedia(item.id)}
+                onRestore={() => restoreMedia(item.id)}
+                onPurge={() => purgeMedia(item.id)}
                 onSetState={(st) => updateMedia(item.id, { displayState: st, displayError: false })}
               />
             ))}
@@ -421,7 +383,8 @@ function MediaPageContent() {
                 )
               })}
               <button
-                onClick={() => { deleteMedia(preview.id); setPreview(null) }}
+                onClick={() => { trashMedia(preview.id); setPreview(null) }}
+                title="移到「刪除」，雲端檔案保留"
                 className="px-4 py-2 rounded-xl text-sm font-medium bg-red-700 hover:bg-red-600 text-white transition-colors"
               >
                 ❌ 刪除
@@ -456,6 +419,8 @@ function MediaCard({
   onApprove,
   onHide,
   onDelete,
+  onRestore,
+  onPurge,
   onSetState,
   draggable,
   isDragging,
@@ -473,6 +438,8 @@ function MediaCard({
   onApprove: () => void
   onHide: () => void
   onDelete: () => void
+  onRestore: () => void
+  onPurge: () => void
   onSetState: (s: DisplayState) => void
   draggable?: boolean
   isDragging?: boolean
@@ -554,7 +521,27 @@ function MediaCard({
           )}
         </div>
 
-        {/* Carousel state — the highlighted one is where this photo sits now */}
+        {/* A trashed photo has no place in the carousel yet — offer the two
+            ways out instead of five states it can't be in. */}
+        {item.status === 'deleted' ? (
+          <div className="grid grid-cols-2 gap-1 mt-2">
+            <button
+              onClick={onRestore}
+              className="text-[10px] py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors leading-tight"
+            >
+              <span className="block text-xs">↩️</span>
+              復原
+            </button>
+            <button
+              onClick={onPurge}
+              title="連同 Google Drive 檔案一起刪除"
+              className="text-[10px] py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors leading-tight"
+            >
+              <span className="block text-xs">🗑️</span>
+              永久刪除
+            </button>
+          </div>
+        ) : (
         <div className="grid grid-cols-5 gap-1 mt-2">
           {([
             { st: 'pinned',  icon: '📌', label: '置頂' },
@@ -581,13 +568,14 @@ function MediaCard({
           })}
           <button
             onClick={onDelete}
-            title="永久刪除"
+            title="移到「刪除」，雲端檔案保留"
             className="text-[10px] py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors leading-tight"
           >
             <span className="block text-xs">❌</span>
             刪除
           </button>
         </div>
+        )}
 
         {/* Approval stays separate from carousel state */}
         <button
