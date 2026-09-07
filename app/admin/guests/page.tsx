@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { collection, onSnapshot, query, limit, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { Guest, Media, Message } from '@/types'
+import { Guest, Media, Message, NameChange } from '@/types'
 
 export default function GuestsPage() {
   const [guests, setGuests] = useState<Guest[]>([])
@@ -33,7 +33,7 @@ export default function GuestsPage() {
   const toggleBlock = async (guest: Guest) => {
     const next = !guest.blocked
     if (next && !confirm(
-      `確定封鎖「${guest.guestName}」？\n\n` +
+      `確定封鎖「${guest.guestName}」${guest.realName ? `（${guest.realName}）` : ''}？\n\n` +
       `• 他將無法再上傳照片或祝福\n` +
       `• 他已上傳的 ${guest.photoCount ?? 0} 張照片會全部設為「已遮蔽」\n` +
       `• 他的 ${guest.messageCount ?? 0} 則祝福會全部隱藏`
@@ -57,9 +57,13 @@ export default function GuestsPage() {
     finally { setProcessing(null) }
   }
 
-  const filtered = guests.filter((g) =>
-    !search || g.guestName.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = guests.filter((g) => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    // Searching the real name is the point of storing it — the couple knows
+    // who came, not what screen name they picked.
+    return g.guestName.toLowerCase().includes(q) || (g.realName ?? '').toLowerCase().includes(q)
+  })
   const blockedCount = guests.filter((g) => g.blocked).length
 
   if (loading) return <div className="text-center py-16 text-gray-400">載入中...</div>
@@ -76,7 +80,7 @@ export default function GuestsPage() {
 
       <input
         type="text"
-        placeholder="搜尋賓客名稱..."
+        placeholder="搜尋本名或投影顯示名稱..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#c9a84c] mb-4"
@@ -104,6 +108,14 @@ export default function GuestsPage() {
                       </span>
                     )}
                   </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    本名：{g.realName
+                      ? <span className="text-gray-700">{g.realName}</span>
+                      : <span className="text-gray-300">未填寫</span>}
+                    {(g.nameHistory?.length ?? 0) > 0 && (
+                      <span className="ml-2 text-[#c9a84c]">✎ 改過 {g.nameHistory!.length} 次</span>
+                    )}
+                  </p>
                   <p className="text-xs text-gray-400 mt-0.5">
                     📷 {g.photoCount ?? 0} · 💌 {g.messageCount ?? 0} · {timeAgo(g.lastActiveAt)}
                   </p>
@@ -128,7 +140,7 @@ export default function GuestsPage() {
                   {processing === g.guestId ? '處理中' : g.blocked ? '解除封鎖' : '封鎖'}
                 </button>
               </div>
-              {expanded === g.guestId && <GuestDetail guestId={g.guestId} />}
+              {expanded === g.guestId && <GuestDetail guest={g} />}
             </div>
           ))}
         </div>
@@ -137,7 +149,8 @@ export default function GuestsPage() {
   )
 }
 
-function GuestDetail({ guestId }: { guestId: string }) {
+function GuestDetail({ guest }: { guest: Guest }) {
+  const guestId = guest.guestId
   const [media, setMedia] = useState<Media[]>([])
   const [messages, setMessages] = useState<Message[]>([])
 
@@ -164,6 +177,39 @@ function GuestDetail({ guestId }: { guestId: string }) {
 
   return (
     <div className="bg-gray-50 px-4 py-4 border-t border-gray-100">
+      {/* Names ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-2 mb-4 max-w-md">
+        <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
+          <p className="text-[10px] text-gray-400">本名</p>
+          <p className="text-sm text-gray-700">{guest.realName || '未填寫'}</p>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 px-3 py-2">
+          <p className="text-[10px] text-gray-400">投影顯示名稱</p>
+          <p className="text-sm text-gray-700">{guest.guestName}</p>
+        </div>
+      </div>
+
+      <p className="text-xs font-medium text-gray-500 mb-2">
+        名稱修改紀錄（{guest.nameHistory?.length ?? 0}）
+      </p>
+      {!guest.nameHistory?.length ? (
+        <p className="text-xs text-gray-400 mb-4">未曾修改</p>
+      ) : (
+        <div className="space-y-1 mb-4">
+          {[...guest.nameHistory].reverse().map((c: NameChange, i) => (
+            <div key={i} className="text-xs bg-white rounded-lg px-3 py-1.5 border border-gray-200 flex flex-wrap items-center gap-x-2">
+              <span className="text-gray-400">
+                {c.field === 'realName' ? '本名' : '投影顯示名稱'}
+              </span>
+              <span className="text-gray-400 line-through">{c.from}</span>
+              <span className="text-gray-300">→</span>
+              <span className="text-gray-700">{c.to}</span>
+              <span className="text-gray-300 ml-auto">{timeAgo(c.at)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <p className="text-xs font-medium text-gray-500 mb-2">照片 / 影片（{media.length}）</p>
       {media.length === 0 ? (
         <p className="text-xs text-gray-400 mb-4">無</p>

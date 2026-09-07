@@ -9,12 +9,16 @@ import GuestLogin from '@/components/guest/GuestLogin'
 import UploadForm from '@/components/guest/UploadForm'
 import MyUploads from '@/components/guest/MyUploads'
 import MessageForm from '@/components/guest/MessageForm'
+import NameEditor from '@/components/guest/NameEditor'
 
 const GUEST_KEY = 'wedding_guest'
 
 interface GuestInfo {
   guestId: string
+  /** 投影顯示名稱 — the name that goes on photos, blessings and the screen */
   guestName: string
+  /** 本名 — sent to the server for the couple, never shown to other guests */
+  realName?: string
 }
 
 export default function GuestPage() {
@@ -22,6 +26,7 @@ export default function GuestPage() {
   const [activeTab, setActiveTab] = useState<'upload' | 'message' | 'myUploads'>('upload')
   const [mounted, setMounted] = useState(false)
   const [albumName, setAlbumName] = useState(DEFAULT_SETTINGS.albumName)
+  const [editingName, setEditingName] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -57,31 +62,55 @@ export default function GuestPage() {
     return () => unsub()
   }, [])
 
-  const handleLogin = (name: string) => {
-    const guestId = uuidv4()
-    const info: GuestInfo = { guestId, guestName: name }
+  /** Record the names against the guest id so the couple can trace edits. */
+  const register = (info: GuestInfo) => {
+    fetch('/api/guests/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        guestId: info.guestId,
+        realName: info.realName,
+        guestName: info.guestName,
+      }),
+    }).catch(() => {
+      // The name is already in localStorage and rides along with every upload,
+      // so a failure here costs the couple a history entry, not the guest's
+      // place in the album.
+    })
+  }
+
+  const saveGuest = (info: GuestInfo) => {
     localStorage.setItem(GUEST_KEY, JSON.stringify(info))
     setGuest(info)
-    window.scrollTo(0, 0)
+    register(info)
   }
 
   /**
-   * Rename keeps the SAME guestId. Issuing a fresh id here would let a blocked
-   * guest shed their identity in two taps, so the id is deliberately sticky.
+   * Both entering the album and filling in a missing real name land here. The
+   * id is reused when one already exists: issuing a fresh one would let a
+   * blocked guest shed their identity in two taps.
    */
-  const handleRename = () => {
+  const handleLogin = (realName: string, guestName: string) => {
+    saveGuest({ guestId: guest?.guestId ?? uuidv4(), guestName, realName })
+    window.scrollTo(0, 0)
+  }
+
+  const handleRename = (realName: string, guestName: string) => {
     if (!guest) return
-    const next = window.prompt('修改顯示名稱', guest.guestName)?.trim()
-    if (!next || next === guest.guestName) return
-    const info: GuestInfo = { guestId: guest.guestId, guestName: next.slice(0, 20) }
-    localStorage.setItem(GUEST_KEY, JSON.stringify(info))
-    setGuest(info)
+    setEditingName(false)
+    if (realName === guest.realName && guestName === guest.guestName) return
+    saveGuest({ guestId: guest.guestId, guestName, realName })
   }
 
   if (!mounted) return null
 
   if (!guest) {
     return <GuestLogin onLogin={handleLogin} />
+  }
+
+  // Guests who joined before the album asked for a real name
+  if (!guest.realName) {
+    return <GuestLogin onLogin={handleLogin} initial={{ guestName: guest.guestName }} />
   }
 
   return (
@@ -94,7 +123,7 @@ export default function GuestPage() {
             <p className="text-xs text-[#c9a84c]">歡迎，{guest.guestName}</p>
           </div>
           <button
-            onClick={handleRename}
+            onClick={() => setEditingName(true)}
             className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
           >
             修改名稱
@@ -142,6 +171,15 @@ export default function GuestPage() {
           <MyUploads guestId={guest.guestId} />
         )}
       </main>
+
+      {editingName && (
+        <NameEditor
+          realName={guest.realName ?? ''}
+          guestName={guest.guestName}
+          onSave={handleRename}
+          onClose={() => setEditingName(false)}
+        />
+      )}
 
       {/* Footer */}
       <footer className="max-w-lg mx-auto px-4 py-8 text-center">

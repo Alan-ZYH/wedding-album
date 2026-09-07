@@ -111,9 +111,26 @@ export const DEFAULT_SETTINGS: Settings = {
  * lastPhotoAt / lastMessageAt drive the upload cooldowns: checking them is a
  * single document read, so no composite index or extra query is needed.
  */
+/** One edit to a guest's own name, kept so the admin can see who changed what. */
+export interface NameChange {
+  at: string                        // ISO
+  field: 'realName' | 'guestName'
+  from: string
+  to: string
+}
+
 export interface Guest {
   guestId: string
+  /**
+   * 投影顯示名稱 — the only name that ever reaches the screen. It is also what
+   * every Media and Message record carries, so the display and 媒體管理 need
+   * to know nothing about the guest's real name.
+   */
   guestName: string
+  /** 本名 — admin-only, so the couple can tell who a screen name belongs to. */
+  realName?: string
+  /** Every edit the guest made to either name, oldest first. */
+  nameHistory?: NameChange[]
   firstSeenAt: string
   lastActiveAt: string
   lastPhotoAt?: string     // start of the current photo cooldown window
