@@ -287,12 +287,12 @@ export default function UploadForm({
           <div className="grid grid-cols-3 gap-2">
             {files.map((f, i) => (
               <div key={i} className="relative aspect-square bg-gray-100 rounded-xl overflow-hidden">
-                                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={f.preview}
-                    alt={f.file.name}
-                    className="w-full h-full object-cover"
-                  />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={f.preview}
+                  alt={f.file.name}
+                  className="w-full h-full object-cover"
+                />
                 <button
                   onClick={(e) => { e.stopPropagation(); removeFile(i) }}
                   className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs transition-colors"
