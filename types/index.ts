@@ -29,6 +29,12 @@ export interface Media {
   displayState: DisplayState
   displayStateAt: string  // ISO — when displayState last changed (pending queue order)
   pinnedOrder?: number    // ordering among pinned photos (time the pin was set)
+  /**
+   * Manual playback order, set by dragging in the admin grid. Photos without
+   * one fall back to upload time, so an untouched album still plays in the
+   * order it arrived.
+   */
+  sortOrder?: number
 }
 
 export interface Message {

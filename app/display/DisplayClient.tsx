@@ -35,6 +35,15 @@ function buildSequence(pinned: Media[], playing: Media[], size: number): Media[]
   return out
 }
 
+/**
+ * Compare by the admin's dragged order when both photos have one; returns null
+ * so the caller can fall through to its own default otherwise.
+ */
+function byManualOrder(a: Media, b: Media): number | null {
+  if (a.sortOrder == null || b.sortOrder == null) return null
+  return a.sortOrder - b.sortOrder
+}
+
 export default function DisplayClient() {
   const [allMedia, setAllMedia] = useState<Media[]>([])
   const [messages, setMessages] = useState<Message[]>([])
@@ -147,13 +156,16 @@ export default function DisplayClient() {
     )
     const videosOk = (m: Media) => !(m.fileType === 'video' && !settings.playVideos)
     return {
+      // Manual order first where the admin has dragged; otherwise pin time
       pinned: usable
         .filter((m) => m.displayState === 'pinned' && videosOk(m))
-        .sort((a, b) => (a.pinnedOrder ?? 0) - (b.pinnedOrder ?? 0)),
-      // oldest first — the front of this list is what rule Y evicts
+        .sort((a, b) => byManualOrder(a, b) ?? (a.pinnedOrder ?? 0) - (b.pinnedOrder ?? 0)),
+      // Manual order first; otherwise oldest promoted, which is what rule Y evicts
       playingPool: usable
         .filter((m) => m.displayState === 'playing' && videosOk(m))
-        .sort((a, b) => (a.displayStateAt || '').localeCompare(b.displayStateAt || '')),
+        .sort((a, b) =>
+          byManualOrder(a, b) ?? (a.displayStateAt || '').localeCompare(b.displayStateAt || '')
+        ),
       // oldest first — the front is promoted next
       pendingQueue: usable
         .filter((m) => m.displayState === 'pending' && videosOk(m))

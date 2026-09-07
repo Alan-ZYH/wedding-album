@@ -47,6 +47,8 @@ function MediaPageContent() {
     return state === 'all' || (m.displayState ?? 'pending') === state
   }
 
+  // Playback order: dragged order where set, upload order otherwise
+  const orderOf = (m: Media) => m.sortOrder ?? Number.MAX_SAFE_INTEGER
   const filtered = media.filter((m) => {
     if (!matchesState(m, filter.state)) return false
     if (filter.type !== 'all' && m.fileType !== filter.type) return false
@@ -56,6 +58,9 @@ function MediaPageContent() {
       if (!m.guestName.toLowerCase().includes(s) && !m.fileName.toLowerCase().includes(s)) return false
     }
     return true
+  }).sort((a, b) => {
+    const d = orderOf(a) - orderOf(b)
+    return d !== 0 ? d : b.uploadTime.localeCompare(a.uploadTime)
   })
 
   const counts = {
@@ -65,6 +70,48 @@ function MediaPageContent() {
     pending: media.filter((m) => m.status !== 'deleted' && (m.displayState ?? 'pending') === 'pending').length,
     masked: media.filter((m) => m.status !== 'deleted' && m.displayState === 'masked').length,
     deleted: media.filter((m) => m.status === 'deleted').length,
+  }
+
+  // ── Drag to reorder ──────────────────────────────────────────
+  // Reorders within the visible list and persists the whole visible order, so
+  // dragging while a filter is applied stays predictable.
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [savingOrder, setSavingOrder] = useState(false)
+
+  const handleDrop = async (targetId: string) => {
+    const sourceId = dragId
+    setDragId(null)
+    setDragOverId(null)
+    if (!sourceId || sourceId === targetId) return
+
+    const visible = filtered.slice(0, visibleCount)
+    const from = visible.findIndex((m) => m.id === sourceId)
+    const to = visible.findIndex((m) => m.id === targetId)
+    if (from < 0 || to < 0) return
+
+    const next = [...visible]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+
+    // Optimistic: renumber locally so the grid settles before the round trip
+    const ids = next.map((m) => m.id)
+    setMedia((prev) =>
+      prev.map((m) => {
+        const i = ids.indexOf(m.id)
+        return i < 0 ? m : { ...m, sortOrder: (i + 1) * 10 }
+      })
+    )
+
+    setSavingOrder(true)
+    try {
+      await fetch('/api/media/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+    } catch {}
+    finally { setSavingOrder(false) }
   }
 
   const toggleSelect = (id: string) => {
@@ -166,7 +213,10 @@ function MediaPageContent() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-serif text-gray-800">媒體管理</h1>
-          <p className="text-sm text-gray-400 mt-0.5">共 {filtered.length} 個項目</p>
+          <p className="text-sm text-gray-400 mt-0.5">
+            共 {filtered.length} 個項目 · 拖曳卡片可調整投放順序
+            {savingOrder && <span className="text-[#c9a84c] ml-2">順序儲存中…</span>}
+          </p>
         </div>
       </div>
 
@@ -261,6 +311,13 @@ function MediaPageContent() {
               <MediaCard
                 key={item.id}
                 item={item}
+                draggable
+                isDragging={dragId === item.id}
+                isDragOver={dragOverId === item.id}
+                onDragStart={() => setDragId(item.id)}
+                onDragEnd={() => { setDragId(null); setDragOverId(null) }}
+                onDragOver={() => setDragOverId(item.id)}
+                onDrop={() => handleDrop(item.id)}
                 selected={selected.has(item.id)}
                 processing={processing === item.id || processing === 'batch'}
                 onSelect={() => toggleSelect(item.id)}
@@ -400,6 +457,13 @@ function MediaCard({
   onHide,
   onDelete,
   onSetState,
+  draggable,
+  isDragging,
+  isDragOver,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDrop,
 }: {
   item: Media
   selected: boolean
@@ -410,11 +474,28 @@ function MediaCard({
   onHide: () => void
   onDelete: () => void
   onSetState: (s: DisplayState) => void
+  draggable?: boolean
+  isDragging?: boolean
+  isDragOver?: boolean
+  onDragStart?: () => void
+  onDragEnd?: () => void
+  onDragOver?: () => void
+  onDrop?: () => void
 }) {
   return (
-    <div className={`relative bg-white rounded-xl border-2 transition-colors overflow-hidden ${
-      selected ? 'border-[#c9a84c]' : 'border-gray-200'
-    } ${processing ? 'opacity-50' : ''}`}>
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => { e.preventDefault(); onDragOver?.() }}
+      onDrop={(e) => { e.preventDefault(); onDrop?.() }}
+      className={`relative bg-white rounded-xl border-2 transition-all overflow-hidden ${
+        isDragOver ? 'border-[#c9a84c] ring-2 ring-[#c9a84c]/40 scale-[1.02]'
+        : selected ? 'border-[#c9a84c]' : 'border-gray-200'
+      } ${processing ? 'opacity-50' : ''} ${isDragging ? 'opacity-40' : ''} ${
+        draggable ? 'cursor-grab active:cursor-grabbing' : ''
+      }`}
+    >
       {/* Checkbox */}
       <input
         type="checkbox"
