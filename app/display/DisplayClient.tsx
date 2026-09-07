@@ -98,15 +98,26 @@ export default function DisplayClient() {
     return onSnapshot(q, (snap) => setMessages(snap.docs.map((d) => d.data() as Message)), () => {})
   }, [])
 
-  // ── Firestore: playback position (multi-screen sync) ─────────
+  // ── Playback position (multi-screen sync) ────────────────────
+  // Read through the API, not the browser SDK: the `display` collection is not
+  // exposed to clients, so a Firestore listener here fails silently and every
+  // follower screen sits on the first slide forever.
+  // Followers poll briskly because this is what drives their picture; the
+  // controller only needs it to notice it has lost the role.
+  const pollMs = isController ? 8_000 : 1_500
   useEffect(() => {
-    if (!db) return
-    return onSnapshot(
-      doc(db, 'display', 'playback'),
-      (snap) => setPlayback(snap.exists() ? (snap.data() as PlaybackState) : null),
-      () => {}
-    )
-  }, [])
+    let cancelled = false
+    const read = async () => {
+      try {
+        const res = await fetch('/api/display')
+        const data = await res.json()
+        if (!cancelled && data.success) setPlayback(data.data as PlaybackState | null)
+      } catch { /* keep the last known position */ }
+    }
+    read()
+    const t = setInterval(read, pollMs)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [pollMs])
 
   // ── Controller election ──────────────────────────────────────
   // Every screen offers to take over; the server only grants it when the

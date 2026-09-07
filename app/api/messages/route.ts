@@ -98,7 +98,10 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
       status: 'active',
       priority: isAdmin ? (body.priority || 1) : 1,
-      fromAdmin: isAdmin,
+      // Requires BOTH admin auth and an explicit flag: the admin cookie is set
+      // for the whole site, so the couple posting from the guest page would
+      // otherwise have their blessing styled as if it came from the panel.
+      fromAdmin: isAdmin && body.fromAdmin === true,
     }
 
     await adminDb.collection(COLLECTIONS.MESSAGES).doc(id).set(doc)

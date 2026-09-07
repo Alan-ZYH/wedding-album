@@ -9,6 +9,26 @@ const PLAYBACK_DOC = adminDb.collection('display').doc('playback')
 const STALE_MS = 30_000
 
 /**
+ * GET — current playback position.
+ *
+ * Follower screens read this instead of the Firestore document directly:
+ * `display` is not exposed to the browser SDK, so a client-side listener fails
+ * silently and every follower stalls on the first slide.
+ */
+export async function GET() {
+  try {
+    const snap = await PLAYBACK_DOC.get()
+    return NextResponse.json({
+      success: true,
+      data: snap.exists ? (snap.data() as PlaybackState) : null,
+    })
+  } catch (err) {
+    console.error('GET /api/display error:', err)
+    return NextResponse.json({ success: false, error: 'playback read failed' }, { status: 500 })
+  }
+}
+
+/**
  * Display coordination endpoint. The display page is public by design, so
  * these operations are deliberately low-stakes: they only move photos between
  * carousel states and record which screen is driving playback.

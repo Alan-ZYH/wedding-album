@@ -142,6 +142,7 @@ export default function AdminUploadPage() {
             guestId={ADMIN_GUEST_ID}
             guestName={adminName}
             cooldownSeconds={0}
+            fromAdmin
           />
           <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-xs text-gray-500 mb-2">大螢幕上的呈現方式</p>

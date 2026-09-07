@@ -1,8 +1,6 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  // Required for @ffmpeg ESM packages to be processed correctly
-  transpilePackages: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
   images: {
     remotePatterns: [
       {

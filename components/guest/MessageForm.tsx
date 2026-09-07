@@ -7,9 +7,11 @@ interface Props {
   guestName: string
   /** Seconds between blessings. 0 disables the cooldown (used by the couple). */
   cooldownSeconds?: number
+  /** Set by the admin panel so the blessing is styled as the couple's. */
+  fromAdmin?: boolean
 }
 
-export default function MessageForm({ guestId, guestName, cooldownSeconds = 30 }: Props) {
+export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, fromAdmin = false }: Props) {
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -36,7 +38,7 @@ export default function MessageForm({ guestId, guestName, cooldownSeconds = 30 }
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId, guestName, message: trimmed }),
+        body: JSON.stringify({ guestId, guestName, message: trimmed, fromAdmin }),
       })
       const data = await res.json()
       if (data.success) {
