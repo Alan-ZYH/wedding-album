@@ -76,3 +76,64 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ success: false, error: '更新失敗' }, { status: 500 })
   }
 }
+
+/**
+ * DELETE /api/guests/[id]
+ *
+ * Removes the guest from 賓客管理 and sends everything they contributed to the
+ * 刪除 columns — photos and blessings alike. Nothing is erased: the media keeps
+ * its Google Drive file, so a deletion made in haste during the reception can
+ * still be undone from 媒體管理.
+ *
+ * Blocking is the milder neighbour of this: it masks photos and hides
+ * blessings but keeps the guest on the list, so they can be unblocked.
+ */
+export async function DELETE(req: NextRequest, { params }: RouteParams) {
+  if (!(await isAdminAuthenticated(req))) {
+    return NextResponse.json({ success: false, error: '無權限' }, { status: 403 })
+  }
+
+  try {
+    const { id } = await params
+    const now = new Date().toISOString()
+    const guestRef = adminDb.collection(COLLECTIONS.GUESTS).doc(id)
+    if (!(await guestRef.get()).exists) {
+      return NextResponse.json({ success: false, error: '找不到此賓客' }, { status: 404 })
+    }
+
+    const [mediaSnap, msgSnap] = await Promise.all([
+      adminDb.collection(COLLECTIONS.MEDIA).where('guestId', '==', id).get(),
+      adminDb.collection(COLLECTIONS.MESSAGES).where('guestId', '==', id).get(),
+    ])
+
+    // Firestore batches cap at 500 writes
+    let batch = adminDb.batch()
+    let pending = 0
+    const flush = async () => {
+      if (pending) { await batch.commit(); batch = adminDb.batch(); pending = 0 }
+    }
+
+    let deletedPhotos = 0
+    let deletedMessages = 0
+    for (const doc of mediaSnap.docs) {
+      if (doc.data().status === 'deleted') continue
+      batch.update(doc.ref, { status: 'deleted', displayState: 'masked', displayStateAt: now })
+      deletedPhotos++
+      if (++pending >= 400) await flush()
+    }
+    for (const doc of msgSnap.docs) {
+      if (doc.data().status === 'deleted') continue
+      batch.update(doc.ref, { status: 'deleted' })
+      deletedMessages++
+      if (++pending >= 400) await flush()
+    }
+    await flush()
+
+    await guestRef.delete()
+
+    return NextResponse.json({ success: true, deletedPhotos, deletedMessages })
+  } catch (err) {
+    console.error('DELETE /api/guests/[id] error:', err)
+    return NextResponse.json({ success: false, error: '刪除失敗' }, { status: 500 })
+  }
+}

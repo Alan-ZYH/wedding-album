@@ -52,6 +52,17 @@ export default function DisplayClient() {
   const [isController, setIsController] = useState(false)
   const [localCurrentId, setLocalCurrentId] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  /**
+   * The QR code is for guests looking at the projector, so it only belongs on
+   * the big screen. A phone running /display is the bride's own view of the
+   * album — a code she would have to scan with the phone already showing it.
+   *
+   * Touch capability separates the two better than width does: a phone held
+   * sideways is wider than some laptop windows, but only one of them has a
+   * coarse pointer and no hover. Resolved after mount, since the server has no
+   * way to know.
+   */
+  const [isTouchScreen, setIsTouchScreen] = useState(false)
   const [loading, setLoading] = useState(true)
   // Browsers need a user gesture before unmuted autoplay is allowed
   const [audioUnlocked, setAudioUnlocked] = useState(false)
@@ -147,6 +158,10 @@ export default function DisplayClient() {
     claim()
     const t = setInterval(claim, 10_000)
     return () => { cancelled = true; clearInterval(t) }
+  }, [])
+
+  useEffect(() => {
+    setIsTouchScreen(window.matchMedia('(hover: none) and (pointer: coarse)').matches)
   }, [])
 
   // ── Split media by display state ─────────────────────────────
@@ -449,7 +464,7 @@ export default function DisplayClient() {
         </div>
       )}
 
-      {settings.showQrCode !== false && (
+      {settings.showQrCode !== false && !isTouchScreen && (
         <QrOverlay
           position={settings.qrPosition ?? 'bottom-right'}
           size={settings.qrSize ?? 160}

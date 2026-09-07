@@ -57,6 +57,34 @@ export default function GuestsPage() {
     finally { setProcessing(null) }
   }
 
+  /**
+   * Removing a guest is the harsher neighbour of blocking: they leave the
+   * list, and everything they contributed lands in the 刪除 columns. Nothing is
+   * erased — the Drive files survive, so 媒體管理 can still bring a photo back.
+   */
+  const deleteGuest = async (guest: Guest) => {
+    if (!confirm(
+      `確定刪除「${guest.guestName}」${guest.realName ? `（${guest.realName}）` : ''}？\n\n` +
+      `• 從賓客清單移除\n` +
+      `• 他的 ${guest.photoCount ?? 0} 張照片移入「刪除」（雲端檔案保留，可從媒體管理復原）\n` +
+      `• 他的 ${guest.messageCount ?? 0} 則祝福移入「刪除」`
+    )) return
+
+    setProcessing(guest.guestId)
+    try {
+      const res = await fetch(`/api/guests/${guest.guestId}`, { method: 'DELETE' })
+      const data = await res.json()
+      await loadGuests()
+      if (data.success) {
+        setExpanded((e) => (e === guest.guestId ? null : e))
+        alert(`已刪除。照片 ${data.deletedPhotos} 張、祝福 ${data.deletedMessages} 則移入「刪除」。`)
+      } else {
+        alert(data.error || '操作失敗')
+      }
+    } catch { alert('網路錯誤，請重試') }
+    finally { setProcessing(null) }
+  }
+
   const filtered = guests.filter((g) => {
     if (!search) return true
     const q = search.toLowerCase()
@@ -138,6 +166,18 @@ export default function GuestsPage() {
                   }`}
                 >
                   {processing === g.guestId ? '處理中' : g.blocked ? '解除封鎖' : '封鎖'}
+                </button>
+                <button
+                  onClick={() => deleteGuest(g)}
+                  disabled={processing === g.guestId}
+                  title="從清單移除，照片與祝福移入「刪除」"
+                  className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
+                    processing === g.guestId
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-red-500 text-white hover:bg-red-600'
+                  }`}
+                >
+                  刪除
                 </button>
               </div>
               {expanded === g.guestId && <GuestDetail guest={g} />}
