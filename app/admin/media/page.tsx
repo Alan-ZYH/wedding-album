@@ -6,6 +6,7 @@ import { Suspense } from 'react'
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Media, DisplayState } from '@/types'
+import { useRealNames, withRealName } from '@/lib/guest-names'
 
 const PAGE_SIZE = 60 // cards rendered at a time; "load more" reveals the next batch
 
@@ -21,6 +22,7 @@ function MediaPageContent() {
   const [preview, setPreview] = useState<Media | null>(null)
   const [processing, setProcessing] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const realNames = useRealNames()
 
   // Real-time listener — updates instantly when guests upload
   useEffect(() => {
@@ -282,6 +284,7 @@ function MediaPageContent() {
                 processing={processing === item.id || processing === 'batch'}
                 onSelect={() => toggleSelect(item.id)}
                 onPreview={() => setPreview(item)}
+                realName={realNames[item.guestId]}
                 onApprove={() => updateMedia(item.id, { approved: !item.approved })}
                 onHide={() => updateMedia(item.id, { status: item.status === 'hidden' ? 'active' : 'hidden' })}
                 onDelete={() => trashMedia(item.id)}
@@ -339,7 +342,9 @@ function MediaPageContent() {
 
             {/* Info */}
             <div className="text-white text-sm text-center mt-3 space-y-1">
-              <p className="font-medium">{preview.guestName}</p>
+              <p className="font-medium">
+                {withRealName(preview.guestName, realNames[preview.guestId])}
+              </p>
               <p className="opacity-60">{preview.fileName}</p>
               <p className="opacity-40 text-xs">
                 {(preview.fileSize / 1024 / 1024).toFixed(1)} MB ·{' '}
@@ -411,6 +416,7 @@ function MediaPageContent() {
 }
 
 function MediaCard({
+  realName,
   item,
   selected,
   processing,
@@ -435,6 +441,7 @@ function MediaCard({
   processing: boolean
   onSelect: () => void
   onPreview: () => void
+  realName?: string
   onApprove: () => void
   onHide: () => void
   onDelete: () => void
@@ -506,7 +513,9 @@ function MediaCard({
 
       {/* Info */}
       <div className="p-2">
-        <p className="text-xs font-medium text-gray-700 truncate">{item.guestName}</p>
+        <p className="text-xs font-medium text-gray-700 truncate">
+          {withRealName(item.guestName, realName)}
+        </p>
         <p className="text-xs text-gray-400 truncate">{item.fileName}</p>
 
         {/* Status badges */}

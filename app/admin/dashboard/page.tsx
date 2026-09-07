@@ -5,6 +5,50 @@ import Link from 'next/link'
 import { Media, Message, DEFAULT_SETTINGS } from '@/types'
 import QrCodePanel from '@/components/admin/QrCodePanel'
 
+/**
+ * Straight into Google Drive, where the originals actually are. The folder ids
+ * come from an admin-only API rather than the bundle: this repo is public, and
+ * a folder id is the whole address of the album.
+ */
+function DriveLinks() {
+  const [links, setLinks] = useState<{ photos: string; videos: string; backup: string | null } | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/admin/drive-links')
+      .then((r) => r.json())
+      .then((d) => (d.success ? setLinks(d.data) : setFailed(true)))
+      .catch(() => setFailed(true))
+  }, [])
+
+  if (failed) return <p className="text-xs text-gray-400">雲端連結讀取失敗</p>
+  if (!links) return <p className="text-xs text-gray-400">讀取中…</p>
+
+  const items = [
+    { label: '照片原檔', href: links.photos, hint: '賓客上傳的原始照片' },
+    { label: '備份相本', href: links.backup, hint: '每小時自動備份的副本' },
+  ].filter((i) => i.href)
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((i) => (
+        <a
+          key={i.label}
+          href={i.href!}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={i.hint}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl border border-[#e8d5a3] bg-[#fdf8f0] hover:bg-[#f8f0dd] transition-colors"
+        >
+          <span>📁</span>
+          <span className="text-sm text-[#7a5c2e]">{i.label}</span>
+          <span className="text-xs text-gray-400">↗</span>
+        </a>
+      ))}
+    </div>
+  )
+}
+
 function CopyUrlRow({ label, path }: { label: string; path: string }) {
   const [copied, setCopied] = useState(false)
   const [url, setUrl] = useState('')
@@ -118,6 +162,12 @@ export default function DashboardPage() {
             <div className="text-sm text-gray-500">{s.label}</div>
           </Link>
         ))}
+      </div>
+
+      {/* Google Drive */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-6">
+        <h2 className="font-medium text-gray-700 mb-3">雲端硬碟</h2>
+        <DriveLinks />
       </div>
 
       {/* Pending approval alert */}

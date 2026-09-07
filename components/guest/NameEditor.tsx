@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { checkNames } from '@/lib/name-rules'
 
 interface Props {
   realName: string
@@ -24,7 +25,8 @@ export default function NameEditor({ realName, guestName, onSave, onClose }: Pro
     const r = real.trim()
     const d = display.trim() || r
     if (!r) { setError('請輸入您的本名'); return }
-    if (r.length > 20 || d.length > 20) { setError('名稱不可超過 20 字'); return }
+    const problem = checkNames(r, d)
+    if (problem) { setError(problem); return }
     onSave(r, d)
   }
 
@@ -47,7 +49,6 @@ export default function NameEditor({ realName, guestName, onSave, onClose }: Pro
             type="text"
             value={real}
             onChange={(e) => { setReal(e.target.value); setError('') }}
-            maxLength={20}
             className="w-full px-3 py-2.5 rounded-xl border border-[#e8d5a3] bg-[#fdf8f0] focus:outline-none focus:border-[#c9a84c] text-base"
           />
         </div>
@@ -59,7 +60,6 @@ export default function NameEditor({ realName, guestName, onSave, onClose }: Pro
             type="text"
             value={display}
             onChange={(e) => { setDisplay(e.target.value); setError('') }}
-            maxLength={20}
             className="w-full px-3 py-2.5 rounded-xl border border-[#e8d5a3] bg-[#fdf8f0] focus:outline-none focus:border-[#c9a84c] text-base"
           />
         </div>

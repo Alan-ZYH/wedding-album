@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { collection, onSnapshot, query, limit } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import { Message } from '@/types'
+import { useRealNames, withRealName } from '@/lib/guest-names'
 
 export default function MessagesPage() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -12,22 +15,36 @@ export default function MessagesPage() {
   const [addingNew, setAddingNew] = useState(false)
   const [filter, setFilter] = useState('')
 
-  const fetchMessages = async () => {
-    try {
-      const res = await fetch('/api/messages')
-      const data = await res.json()
-      if (data.success) setMessages(data.data)
-    } catch {}
-    finally { setLoading(false) }
-  }
+  const realNames = useRealNames()
 
-  useEffect(() => { fetchMessages() }, [])
+  // Live, like 媒體管理: a blessing posted from the floor should appear here
+  // without the couple thinking to reload. Sorting is done in memory because
+  // status + createdAt would need a composite index.
+  useEffect(() => {
+    if (!db) return
+    const unsub = onSnapshot(
+      query(collection(db, 'messages'), limit(1000)),
+      (snap) => {
+        setMessages(
+          snap.docs.map((d) => d.data() as Message)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        )
+        setLoading(false)
+      },
+      () => setLoading(false)
+    )
+    return () => unsub()
+  }, [])
 
   const filtered = messages.filter((m) => {
     if (m.status === 'deleted') return false
     if (!filter) return true
     const s = filter.toLowerCase()
-    return m.guestName.toLowerCase().includes(s) || m.message.toLowerCase().includes(s)
+    return (
+      m.guestName.toLowerCase().includes(s) ||
+      (realNames[m.guestId] ?? '').toLowerCase().includes(s) ||
+      m.message.toLowerCase().includes(s)
+    )
   })
 
   const updateMsg = async (id: string, updates: Record<string, unknown>) => {
@@ -69,7 +86,7 @@ export default function MessagesPage() {
       if ((await res.json()).success) {
         setNewMsg({ guestName: '', message: '' })
         setAddingNew(false)
-        await fetchMessages()
+        // the snapshot listener brings the new blessing in on its own
       }
     } catch {}
   }
@@ -152,7 +169,9 @@ export default function MessagesPage() {
               <div className="flex justify-between items-start gap-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium text-[#7a5c2e]">{msg.guestName}</span>
+                    <span className="text-sm font-medium text-[#7a5c2e]">
+                      {withRealName(msg.guestName, realNames[msg.guestId])}
+                    </span>
                     {msg.priority === 2 && (
                       <span className="text-xs bg-[#c9a84c]/20 text-[#7a5c2e] px-2 py-0.5 rounded-full">
                         高優先

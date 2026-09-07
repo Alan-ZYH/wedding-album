@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { checkNames } from '@/lib/name-rules'
 
 interface Props {
   onLogin: (realName: string, guestName: string) => void
@@ -24,8 +25,9 @@ export default function GuestLogin({ onLogin, initial }: Props) {
       setError('請輸入您的本名')
       return
     }
-    if (real.length > 20 || display.length > 20) {
-      setError('名稱不可超過 20 字')
+    const problem = checkNames(real, display)
+    if (problem) {
+      setError(problem)
       return
     }
     onLogin(real, display)
@@ -62,7 +64,6 @@ export default function GuestLogin({ onLogin, initial }: Props) {
               value={realName}
               onChange={(e) => { setRealName(e.target.value); setError('') }}
               placeholder="例：王小明"
-              maxLength={20}
               className="w-full px-4 py-3 rounded-xl border border-[#e8d5a3] bg-[#fdf8f0] text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#c9a84c] focus:ring-2 focus:ring-[#c9a84c]/20 transition-all text-base"
             />
           </div>
@@ -77,7 +78,6 @@ export default function GuestLogin({ onLogin, initial }: Props) {
               value={guestName}
               onChange={(e) => { setGuestName(e.target.value); setError('') }}
               placeholder="例：小明"
-              maxLength={20}
               className="w-full px-4 py-3 rounded-xl border border-[#e8d5a3] bg-[#fdf8f0] text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#c9a84c] focus:ring-2 focus:ring-[#c9a84c]/20 transition-all text-base"
             />
           </div>

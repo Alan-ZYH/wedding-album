@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { sanitizeName } from '@/lib/sanitize'
 import { Guest, NameChange } from '@/types'
+import { checkNames } from '@/lib/name-rules'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,12 @@ export async function POST(req: NextRequest) {
 
     if (!guestId || !realName || !guestName) {
       return NextResponse.json({ success: false, error: '缺少必要欄位' }, { status: 400 })
+    }
+
+    // The form checks this too; a client is not a place to enforce anything
+    const problem = checkNames(realName, guestName)
+    if (problem) {
+      return NextResponse.json({ success: false, error: problem }, { status: 400 })
     }
 
     const ref = adminDb.collection(COLLECTIONS.GUESTS).doc(guestId)
