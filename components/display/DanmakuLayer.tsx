@@ -67,6 +67,14 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
   // otherwise every new blessing would tear down and restart the interval,
   // delaying the next danmaku each time guests post in quick succession.
   const hasMessages = messages.length > 0
+
+  // The spawn loop below is created once and deliberately kept alive, so it
+  // would otherwise hold whatever colour was set at mount — which is the
+  // default, because settings arrive from Firestore a moment later. A ref lets
+  // `fire` read the colour the couple actually chose without restarting the
+  // loop and stalling the next danmaku.
+  const adminColorRef = useRef(adminColor)
+  adminColorRef.current = adminColor
   useEffect(() => {
     if (!hasMessages) return
 
@@ -108,7 +116,7 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
         top: topPct,
         left: leftPct,
         duration: duration + Math.random() * 2000,
-        color: msg.fromAdmin ? adminColor : color,
+        color: msg.fromAdmin ? adminColorRef.current : color,
         fromAdmin: !!msg.fromAdmin,
       }
 
