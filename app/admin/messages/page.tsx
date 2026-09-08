@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { collection, onSnapshot, query, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Message } from '@/types'
-import { useRealNames, withRealName } from '@/lib/guest-names'
+import { useRealNames, withRealName, ADMIN_GUEST_ID } from '@/lib/guest-names'
 
 export default function MessagesPage() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -170,7 +170,11 @@ export default function MessagesPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium text-[#7a5c2e]">
-                      {withRealName(msg.guestName, realNames[msg.guestId])}
+                      {withRealName(
+                        msg.guestName,
+                        realNames[msg.guestId],
+                        msg.fromAdmin || msg.guestId === ADMIN_GUEST_ID
+                      )}
                     </span>
                     {msg.priority === 2 && (
                       <span className="text-xs bg-[#c9a84c]/20 text-[#7a5c2e] px-2 py-0.5 rounded-full">

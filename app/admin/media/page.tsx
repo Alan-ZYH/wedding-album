@@ -6,7 +6,7 @@ import { Suspense } from 'react'
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Media, DisplayState } from '@/types'
-import { useRealNames, withRealName } from '@/lib/guest-names'
+import { useRealNames, withRealName, ADMIN_GUEST_ID } from '@/lib/guest-names'
 
 const PAGE_SIZE = 60 // cards rendered at a time; "load more" reveals the next batch
 
@@ -343,7 +343,11 @@ function MediaPageContent() {
             {/* Info */}
             <div className="text-white text-sm text-center mt-3 space-y-1">
               <p className="font-medium">
-                {withRealName(preview.guestName, realNames[preview.guestId])}
+                {withRealName(
+                  preview.guestName,
+                  realNames[preview.guestId],
+                  preview.guestId === ADMIN_GUEST_ID
+                )}
               </p>
               <p className="opacity-60">{preview.fileName}</p>
               <p className="opacity-40 text-xs">
@@ -514,7 +518,7 @@ function MediaCard({
       {/* Info */}
       <div className="p-2">
         <p className="text-xs font-medium text-gray-700 truncate">
-          {withRealName(item.guestName, realName)}
+          {withRealName(item.guestName, realName, item.guestId === ADMIN_GUEST_ID)}
         </p>
         <p className="text-xs text-gray-400 truncate">{item.fileName}</p>
 

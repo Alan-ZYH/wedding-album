@@ -52,7 +52,18 @@ export function useRealNames(guestIds: string[] = [], intervalMs = 30_000) {
   return names
 }
 
-/** 「投影名稱（本名）」, falling back to the display name alone. */
-export function withRealName(guestName: string, realName?: string) {
+/** Fixed id for everything the couple posts from the admin panel. */
+export const ADMIN_GUEST_ID = 'admin'
+
+/**
+ * 「投影名稱（本名）」 for a guest, 「投影名稱（管理端）」 for the couple.
+ *
+ * The couple has no entry in the guests collection — nothing throttles or
+ * blocks them, so nothing ever creates one — which would otherwise leave their
+ * blessings as a bare name, indistinguishable from a guest whose real name has
+ * yet to load.
+ */
+export function withRealName(guestName: string, realName?: string, fromAdmin?: boolean) {
+  if (fromAdmin) return `${guestName}（管理端）`
   return realName && realName !== guestName ? `${guestName}（${realName}）` : guestName
 }

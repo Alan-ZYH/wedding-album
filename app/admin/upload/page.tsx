@@ -4,10 +4,7 @@ import { useState, useEffect } from 'react'
 import { Settings, DEFAULT_SETTINGS } from '@/types'
 import UploadForm from '@/components/guest/UploadForm'
 import MessageForm from '@/components/guest/MessageForm'
-
-/** Fixed id so everything the couple posts groups together and stays out of
- *  the guest list (recordGuestAction is skipped for admins). */
-const ADMIN_GUEST_ID = 'admin'
+import { ADMIN_GUEST_ID } from '@/lib/guest-names'
 
 const PRESET_COLORS = [
   '#c9a84c', // 香檳金
