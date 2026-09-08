@@ -211,7 +211,7 @@ function MediaPageContent() {
       </div>
 
       {/* State filter — one tap per state, with live counts */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-2 mb-3 flex flex-wrap gap-1">
+      <div className="bg-white rounded-2xl border border-gray-200 p-2 mb-3 flex gap-1 overflow-x-auto scrollbar-hide md:flex-wrap md:overflow-visible">
         {([
           { st: 'all',     label: '全部', icon: '' },
           { st: 'pinned',  label: '置頂', icon: '📌' },
@@ -223,7 +223,7 @@ function MediaPageContent() {
           <button
             key={t.st}
             onClick={() => setFilter((f) => ({ ...f, state: t.st }))}
-            className={`flex-1 min-w-20 px-3 py-2 rounded-xl text-sm transition-colors ${
+            className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-sm transition-colors md:flex-1 md:min-w-20 ${
               filter.state === t.st
                 ? 'bg-[#c9a84c] text-white font-medium'
                 : 'text-gray-600 hover:bg-gray-100'
@@ -239,13 +239,13 @@ function MediaPageContent() {
 
       {/* Batch actions */}
       {selected.size > 0 && (
-        <div className="bg-[#c9a84c]/10 border border-[#c9a84c]/30 rounded-xl p-3 mb-4 flex items-center gap-3">
+        <div className="bg-[#c9a84c]/10 border border-[#c9a84c]/30 rounded-xl p-3 mb-4 flex flex-wrap items-center gap-2">
           <span className="text-sm text-[#7a5c2e]">已選 {selected.size} 項</span>
           <button onClick={batchApprove} className="text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg hover:bg-green-600">批次通過</button>
           <button onClick={batchHide} className="text-xs bg-gray-500 text-white px-3 py-1.5 rounded-lg hover:bg-gray-600">批次隱藏</button>
           <button onClick={batchDelete} className="text-xs bg-red-500 text-white px-3 py-1.5 rounded-lg hover:bg-red-600">批次刪除</button>
           <span className="text-xs text-gray-400">（移到「刪除」，雲端檔案保留）</span>
-          <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:text-gray-700 ml-auto">取消</button>
+          <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:text-gray-700 ml-auto shrink-0">取消</button>
         </div>
       )}
 
@@ -316,7 +316,7 @@ function MediaPageContent() {
           onClick={() => setPreview(null)}
         >
           <button className="absolute top-4 right-4 text-white text-3xl leading-none" onClick={() => setPreview(null)}>×</button>
-          <div onClick={(e) => e.stopPropagation()} className="max-w-3xl w-full">
+          <div onClick={(e) => e.stopPropagation()} className="max-w-3xl w-full max-h-[90dvh] overflow-y-auto">
             {/* Media preview */}
             {preview.fileType === 'photo' ? (
               // eslint-disable-next-line @next/next/no-img-element

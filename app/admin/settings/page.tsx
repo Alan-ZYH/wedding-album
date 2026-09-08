@@ -77,7 +77,7 @@ export default function SettingsPage() {
               type="text"
               value={settings.albumName ?? '婚禮紀念相簿'}
               onChange={(e) => update('albumName', e.target.value)}
-              className="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#c9a84c] w-56"
+              className="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#c9a84c] w-full sm:w-56"
               placeholder="婚禮紀念相簿"
             />
           </div>

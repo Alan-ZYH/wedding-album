@@ -123,8 +123,8 @@ export default function GuestsPage() {
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           {filtered.map((g, i) => (
             <div key={g.guestId} className={i > 0 ? 'border-t border-gray-100' : ''}>
-              <div className="flex items-center gap-3 px-4 py-3">
-                <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+                <div className="flex-1 min-w-[55%] sm:min-w-0">
                   <p className="text-sm font-medium text-gray-700 truncate">
                     {g.guestName}
                     <span className="text-gray-300 font-mono text-xs ml-1.5">

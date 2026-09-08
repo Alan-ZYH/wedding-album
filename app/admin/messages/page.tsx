@@ -95,7 +95,7 @@ export default function MessagesPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap gap-3 justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-serif text-gray-800">祝福管理</h1>
           <p className="text-sm text-gray-400">共 {filtered.length} 則祝福</p>
@@ -112,7 +112,7 @@ export default function MessagesPage() {
       {addingNew && (
         <div className="bg-white rounded-2xl border border-[#c9a84c]/30 p-4 mb-4">
           <h3 className="text-sm font-medium text-gray-700 mb-3">新增祝福</h3>
-          <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             <input
               type="text"
               placeholder="名稱（選填）"
