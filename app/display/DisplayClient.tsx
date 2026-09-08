@@ -63,6 +63,7 @@ export default function DisplayClient() {
    * way to know.
    */
   const [isTouchScreen, setIsTouchScreen] = useState(false)
+  const [viewportWidth, setViewportWidth] = useState(0)
   const [loading, setLoading] = useState(true)
   // Browsers need a user gesture before unmuted autoplay is allowed
   const [audioUnlocked, setAudioUnlocked] = useState(false)
@@ -162,7 +163,19 @@ export default function DisplayClient() {
 
   useEffect(() => {
     setIsTouchScreen(window.matchMedia('(hover: none) and (pointer: coarse)').matches)
+    const onResize = () => setViewportWidth(window.innerWidth)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
   }, [])
+
+  // The danmaku size is chosen against a projector. Carried unchanged onto a
+  // phone it covers the photo it is meant to float over, so narrow screens get
+  // a proportionally smaller version with a floor that stays readable.
+  const danmakuFontSize =
+    viewportWidth > 0 && viewportWidth < 768
+      ? Math.max(15, Math.round(settings.danmakuFontSize * 0.6))
+      : settings.danmakuFontSize
 
   // ── Split media by display state ─────────────────────────────
   const { pinned, playingPool, pendingQueue } = useMemo(() => {
@@ -398,6 +411,12 @@ export default function DisplayClient() {
     }
   }, [currentIndex, sequence])
 
+  // A projector should show no chrome, so on a mouse the control bar waits for
+  // hover. A phone has no hover, and tapping the screen already means "next
+  // photo", so there it simply stays — otherwise 上一張 and 全螢幕 are
+  // unreachable on the one screen the bride actually holds.
+  const controlBarVisibility = isTouchScreen ? 'opacity-100' : 'opacity-0 hover:opacity-100'
+
   const showAudioHint =
     !settings.muteVideos && !audioUnlocked && current?.fileType === 'video' && settings.playVideos
 
@@ -476,14 +495,14 @@ export default function DisplayClient() {
           messages={messages}
           speed={settings.danmakuSpeed}
           density={settings.danmakuDensity}
-          fontSize={settings.danmakuFontSize}
+          fontSize={danmakuFontSize}
           danmakuStyle={settings.danmakuStyle ?? 'scroll'}
           adminColor={settings.adminMessageColor ?? '#c9a84c'}
         />
       )}
 
       <div
-        className="absolute top-0 left-0 right-0 flex justify-between items-center px-6 py-4 opacity-0 hover:opacity-100 transition-opacity bg-gradient-to-b from-black/50 to-transparent z-30"
+        className={`absolute top-0 left-0 right-0 flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 transition-opacity bg-gradient-to-b from-black/50 to-transparent z-30 ${controlBarVisibility}`}
         onClick={(e) => e.stopPropagation()}
       >
         <button
