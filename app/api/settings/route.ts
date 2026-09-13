@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSettings, updateSettings } from '@/lib/settings'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { enforceCarouselCapacity } from '@/lib/carousel'
+import { enforceMessageCapacity } from '@/lib/message-pool'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,8 +46,12 @@ export async function PATCH(req: NextRequest) {
     if ('carouselSize' in body) {
       masked = await enforceCarouselCapacity(updated.carouselSize ?? 50)
     }
+    let maskedMessages = 0
+    if ('messageCarouselSize' in body) {
+      maskedMessages = await enforceMessageCapacity(updated.messageCarouselSize ?? 20)
+    }
 
-    return NextResponse.json({ success: true, data: sanitizeSettings(updated as never), masked })
+    return NextResponse.json({ success: true, data: sanitizeSettings(updated as never), masked, maskedMessages })
   } catch (err) {
     console.error('PATCH /api/settings error:', err)
     return NextResponse.json({ success: false, error: '更新設定失敗' }, { status: 500 })

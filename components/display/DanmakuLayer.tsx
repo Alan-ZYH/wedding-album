@@ -38,6 +38,10 @@ const MAX_ACTIVE_DANMAKU = 60
 export default function DanmakuLayer({ messages, speed, density, fontSize, danmakuStyle, adminColor = '#c9a84c' }: Props) {
   const [active, setActive] = useState<DanmakuItem[]>([])
   const poolRef = useRef<Message[]>([])
+  // 插播: blessings that arrived after the screen loaded fly next, ahead of
+  // the rotation, so a guest who just posted sees theirs within seconds.
+  const seenRef = useRef<Set<string> | null>(null)
+  const urgentRef = useRef<Message[]>([])
   const channelsRef = useRef<number[]>([]) // track occupied y positions
   const activeCountRef = useRef(0) // mirrors active.length for use inside timers
   const numChannels = 8
@@ -47,6 +51,26 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
   }, [active.length])
 
   useEffect(() => {
+    // The first batch is the rotation as it stood on load — nothing to jump.
+    // Anything unseen after that is new, or was just 投放 back in.
+    if (seenRef.current === null) {
+      // The screen mounts with an empty list before Firestore answers; waiting
+      // for real data keeps the whole rotation from queueing as 插播 at once
+      if (messages.length === 0) return
+      seenRef.current = new Set(messages.map((m) => m.id))
+    } else {
+      for (const m of messages) {
+        if (!seenRef.current.has(m.id)) {
+          seenRef.current.add(m.id)
+          urgentRef.current.push(m)
+        }
+      }
+    }
+    // A blessing that left rotation may fly again later if it is 投放 back
+    const present = new Set(messages.map((m) => m.id))
+    for (const id of [...seenRef.current]) if (!present.has(id)) seenRef.current.delete(id)
+    urgentRef.current = urgentRef.current.filter((m) => present.has(m.id))
+
     if (messages.length === 0) return
 
     // Build weighted pool (priority messages appear more)
@@ -91,8 +115,7 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
       // during long events with many messages
       if (activeCountRef.current >= MAX_ACTIVE_DANMAKU) return
 
-      const msg = poolRef.current[poolIndex % poolRef.current.length]
-      poolIndex++
+      const msg = urgentRef.current.shift() ?? poolRef.current[poolIndex++ % poolRef.current.length]
 
       // Find free channel
       const usedChannels = channelsRef.current

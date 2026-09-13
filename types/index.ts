@@ -47,7 +47,24 @@ export interface Message {
   status: 'active' | 'hidden' | 'deleted'
   priority: number // 1 = normal, 2 = high
   fromAdmin?: boolean // posted from the admin panel — styled distinctly on screen
+  /**
+   * Where the blessing sits in the danmaku rotation, mirroring photos minus the
+   * queue: a new blessing goes straight on screen.
+   *   pinned  → always in rotation, occupies a slot, never pushed out
+   *   playing → in rotation until newer blessings push it out
+   *   masked  → out of rotation; 投放 brings it back
+   */
+  displayState?: MessageDisplayState
+  displayStateAt?: string
+  /**
+   * Present only while playing. It exists so the oldest blessing in rotation
+   * can be found with a single-field ordered query — one read, no composite
+   * index — instead of reading the whole rotation on every new blessing.
+   */
+  playingSince?: string
 }
+
+export type MessageDisplayState = 'pinned' | 'playing' | 'masked'
 
 export type SlideTransition = 'fade' | 'slide' | 'zoom' | 'none'
 export type DanmakuStyle = 'scroll' | 'scroll-reverse' | 'float' | 'fade'
@@ -70,6 +87,7 @@ export interface Settings {
   slideTransition: SlideTransition
   danmakuStyle: DanmakuStyle
   carouselSize: number      // max photos in the carousel (pinned + playing)
+  messageCarouselSize: number // max blessings in the danmaku rotation (pinned + playing)
   allowInsert: boolean      // when false, new uploads stay in 'pending'
   showQrCode: boolean       // overlay the guest QR on the projection screen
   qrPosition: QrPosition
@@ -95,6 +113,7 @@ export const DEFAULT_SETTINGS: Settings = {
   slideTransition: 'fade',
   danmakuStyle: 'scroll',
   carouselSize: 50,
+  messageCarouselSize: 20,
   allowInsert: true,
   showQrCode: true,
   qrPosition: 'bottom-right',

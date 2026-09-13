@@ -9,10 +9,13 @@ interface Props {
   cooldownSeconds?: number
   /** Set by the admin panel so the blessing is styled as the couple's. */
   fromAdmin?: boolean
+  /** Offer 置頂 — the admin panel only; the server ignores it from guests. */
+  allowPin?: boolean
 }
 
-export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, fromAdmin = false }: Props) {
+export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, fromAdmin = false, allowPin = false }: Props) {
   const [message, setMessage] = useState('')
+  const [pinned, setPinned] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
@@ -38,11 +41,12 @@ export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, 
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId, guestName, message: trimmed, fromAdmin }),
+        body: JSON.stringify({ guestId, guestName, message: trimmed, fromAdmin, pinned: allowPin && pinned }),
       })
       const data = await res.json()
       if (data.success) {
         setMessage('')
+        setPinned(false)
         setSubmitted(true)
         if (cooldownSeconds > 0) setCooldown(cooldownSeconds)
         setTimeout(() => setSubmitted(false), 3000)
@@ -80,6 +84,17 @@ export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, 
             className="w-full resize-none bg-[#fdf8f0] border border-[#e8d5a3] rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#c9a84c] transition-colors"
           />
           <div className="flex justify-between items-center mt-2">
+            {allowPin ? (
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={pinned}
+                  onChange={(e) => setPinned(e.target.checked)}
+                  className="accent-[#c9a84c]"
+                />
+                📌 置頂
+              </label>
+            ) : <span />}
             <span className="text-xs text-gray-400">{message.length}/500</span>
           </div>
           {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
@@ -103,9 +118,11 @@ export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, 
         </button>
       </form>
 
-      <p className="text-xs text-gray-400 mt-4 text-center">
-        送出後可在「我的上傳」修改或刪除自己的祝福
-      </p>
+      {!fromAdmin && (
+        <p className="text-xs text-gray-400 mt-4 text-center">
+          送出後可在「我的上傳」修改或刪除自己的祝福
+        </p>
+      )}
     </div>
   )
 }

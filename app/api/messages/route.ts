@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { checkGuestGate, gateErrorMessage, recordGuestAction } from '@/lib/guests'
+import { admitMessage, PinLimitError } from '@/lib/message-pool'
 import { sanitizeText, sanitizeName } from '@/lib/sanitize'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { Message } from '@/types'
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString()
     const id = uuidv4()
 
-    const doc: Message = {
+    const doc: Omit<Message, 'displayState' | 'displayStateAt' | 'playingSince'> = {
       id,
       guestId: guestId || 'admin',
       guestName,
@@ -104,7 +105,22 @@ export async function POST(req: NextRequest) {
       fromAdmin: isAdmin && body.fromAdmin === true,
     }
 
-    await adminDb.collection(COLLECTIONS.MESSAGES).doc(id).set(doc)
+    // Straight into rotation — a new blessing is shown right away and the
+    // oldest one still playing makes room. The couple may pin theirs as they
+    // post; a guest never can.
+    const pin = isAdmin && body.pinned === true
+    try {
+      await admitMessage({
+        ref: adminDb.collection(COLLECTIONS.MESSAGES).doc(id),
+        as: pin ? 'pinned' : 'playing',
+        create: doc,
+      })
+    } catch (err) {
+      if (err instanceof PinLimitError) {
+        return NextResponse.json({ success: false, error: err.message }, { status: 409 })
+      }
+      throw err
+    }
 
     // Only successful posts advance the cooldown window
     if (!isAdmin && guestId) {

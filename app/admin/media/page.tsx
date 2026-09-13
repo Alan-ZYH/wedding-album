@@ -39,9 +39,12 @@ function MediaPageContent() {
     return () => unsub()
   }, [])
 
-  // Reset pagination when filters change
+  // Changing tabs resets paging and — importantly — the selection. A selection
+  // made on another tab would otherwise ride along invisibly, and in 刪除 the
+  // batch button erases files for good.
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
+    setSelected(new Set())
   }, [filter.pending, filter.state])
 
   // 「刪除」是 status，其餘四種是 displayState；預設不顯示已刪除的
@@ -195,10 +198,39 @@ function MediaPageContent() {
     }
   }
 
-  const batchApprove = () => batchUpdate({ approved: true })
-  const batchHide = () => batchUpdate({ status: 'hidden' })
+  const inTrash = filter.state === 'deleted'
 
-  const batchDelete = () => batchUpdate({ status: 'deleted', displayState: 'masked' })
+  // 批次遮蔽: from the 刪除 tab this is the way back — the photo returns to the
+  // album, masked, so nothing reappears on screen by surprise. Elsewhere it
+  // just takes the selection out of the carousel.
+  const batchMask = () =>
+    batchUpdate(inTrash ? { status: 'active', displayState: 'masked' } : { displayState: 'masked' })
+
+  // 批次刪除: elsewhere, a move to 刪除 that keeps the Drive file. In 刪除 the
+  // photos are already there, so moving them again did nothing at all — here
+  // it means erasing them, the one irreversible action on this page.
+  const batchDelete = async () => {
+    if (!inTrash) return batchUpdate({ status: 'deleted', displayState: 'masked' })
+
+    const ids = [...selected]
+    if (!confirm(
+      `確定永久刪除 ${ids.length} 張照片？\n\n` +
+      `連同 Google Drive 裡的原檔一起刪除，無法復原。`
+    )) return
+    setProcessing('batch')
+    try {
+      await runBatch(ids, async (id) => {
+        const res = await fetch(`/api/media/${id}`, { method: 'DELETE' })
+        if ((await res.json()).success) {
+          setMedia((prev) => prev.filter((m) => m.id !== id))
+        }
+      })
+    } catch {}
+    finally {
+      setProcessing(null)
+      setSelected(new Set())
+    }
+  }
 
   if (loading) return <div className="text-center py-16 text-gray-400">載入中...</div>
 
@@ -245,10 +277,15 @@ function MediaPageContent() {
       {selected.size > 0 && (
         <div className="bg-[#c9a84c]/10 border border-[#c9a84c]/30 rounded-xl p-3 mb-4 flex flex-wrap items-center gap-2">
           <span className="text-sm text-[#7a5c2e]">已選 {selected.size} 項</span>
-          <button onClick={batchApprove} className="text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg hover:bg-green-600">批次通過</button>
-          <button onClick={batchHide} className="text-xs bg-gray-500 text-white px-3 py-1.5 rounded-lg hover:bg-gray-600">批次隱藏</button>
-          <button onClick={batchDelete} className="text-xs bg-red-500 text-white px-3 py-1.5 rounded-lg hover:bg-red-600">批次刪除</button>
-          <span className="text-xs text-gray-400">（移到「刪除」，雲端檔案保留）</span>
+          <button onClick={batchMask} disabled={processing === 'batch'} className="text-xs bg-gray-500 text-white px-3 py-1.5 rounded-lg hover:bg-gray-600 disabled:opacity-50">
+            {inTrash ? '批次遮蔽（移回相簿）' : '批次遮蔽'}
+          </button>
+          <button onClick={batchDelete} disabled={processing === 'batch'} className="text-xs bg-red-500 text-white px-3 py-1.5 rounded-lg hover:bg-red-600 disabled:opacity-50">
+            {inTrash ? '批次永久刪除' : '批次刪除'}
+          </button>
+          <span className="text-xs text-gray-400">
+            {inTrash ? '（永久刪除會連同雲端原檔一起刪掉）' : '（移到「刪除」，雲端檔案保留）'}
+          </span>
           <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:text-gray-700 ml-auto shrink-0">取消</button>
         </div>
       )}

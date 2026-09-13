@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { collection, doc, onSnapshot, query, where, orderBy } from 'firebase/firestore'
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Media, Message, Settings, DEFAULT_SETTINGS, PlaybackState, NamePosition } from '@/types'
 import DanmakuLayer from '@/components/display/DanmakuLayer'
@@ -139,16 +139,16 @@ export default function DisplayClient() {
   }, [carouselDocs, queueDocs])
 
   // ── Firestore: messages ──────────────────────────────────────
-  // No limit: ascending with a limit kept the OLDEST blessings, so once there
-  // were more than the limit, every new one was silently left off the screen.
-  // Blessings are small and few, and the index (status, createdAt asc) still
-  // serves this query unchanged.
+  // Only the rotation — pinned and playing — which the server keeps at the
+  // configured size. Blessings that were pushed out are never fetched, so the
+  // screen's reads stay flat however many guests write. Unordered, so no
+  // composite index is involved.
   useEffect(() => {
     if (!db) return
     const q = query(
       collection(db, 'messages'),
       where('status', '==', 'active'),
-      orderBy('createdAt', 'asc')
+      where('displayState', 'in', ['pinned', 'playing'])
     )
     return onSnapshot(q, (snap) => setMessages(snap.docs.map((d) => d.data() as Message)), () => {})
   }, [])

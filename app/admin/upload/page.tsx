@@ -44,8 +44,8 @@ export default function AdminUploadPage() {
     } catch { /* the next save, or the settings page, will catch up */ }
   }
 
-  const saveName = async () => {
-    const next = nameDraft.trim().slice(0, 20)
+  const saveName = async (value = nameDraft) => {
+    const next = value.trim().slice(0, 20)
     if (!next || next === adminName) { setEditingName(false); return }
     setSavingName(true)
     try {
@@ -96,7 +96,7 @@ export default function AdminUploadPage() {
                 className="flex-1 border border-gray-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:border-[#c9a84c]"
               />
               <button
-                onClick={saveName}
+                onClick={() => saveName()}
                 disabled={savingName}
                 className="text-xs bg-[#c9a84c] hover:bg-[#b8953d] text-white px-3 py-1.5 rounded-lg transition-colors"
               >
@@ -123,6 +123,24 @@ export default function AdminUploadPage() {
               </button>
             </>
           )}
+        </div>
+
+        {/* The two people who post from here — one tap, no typing mid-reception */}
+        <div className="flex gap-2 mt-3">
+          {['新郎', '新娘'].map((n) => (
+            <button
+              key={n}
+              onClick={() => saveName(n)}
+              disabled={savingName}
+              className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${
+                adminName === n
+                  ? 'bg-[#c9a84c] text-white'
+                  : 'bg-[#fdf8f0] border border-[#e8d5a3] text-[#7a5c2e] hover:bg-[#f8f0dd]'
+              }`}
+            >
+              {n === '新郎' ? '🤵 新郎' : '👰 新娘'}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -160,6 +178,7 @@ export default function AdminUploadPage() {
             guestName={adminName}
             cooldownSeconds={0}
             fromAdmin
+            allowPin
           />
           <BlessingStyle
             name={adminName}

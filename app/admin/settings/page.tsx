@@ -10,6 +10,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false)
   // How many photos the last save pushed out of 播放 by shrinking the carousel
   const [masked, setMasked] = useState(0)
+  const [maskedMessages, setMaskedMessages] = useState(0)
 
   useEffect(() => {
     fetch('/api/settings')
@@ -31,6 +32,7 @@ export default function SettingsPage() {
       if (data.success) {
         setSaved(true)
         setMasked(data.masked ?? 0)
+        setMaskedMessages(data.maskedMessages ?? 0)
         setTimeout(() => setSaved(false), 2500)
       }
     } catch {}
@@ -214,6 +216,21 @@ export default function SettingsPage() {
             value={settings.showDanmaku}
             onChange={(v) => update('showDanmaku', v)}
           />
+          <SliderField
+            label="祝福輪播數量"
+            min={5} max={100} step={5}
+            value={settings.messageCarouselSize ?? 20}
+            onChange={(v) => update('messageCarouselSize', v)}
+            display={`${settings.messageCarouselSize ?? 20} 則`}
+          />
+          <p className="text-xs text-gray-400 -mt-2">
+            大螢幕只輪播這麼多則，新祝福進來會擠掉最舊的一則。置頂祝福也佔名額，但不會被擠掉。
+          </p>
+          {maskedMessages > 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              已將 {maskedMessages} 則最舊的祝福移出輪播，讓數量符合新的上限。
+            </p>
+          )}
           <DanmakuStyleField
             value={settings.danmakuStyle}
             onChange={(v) => update('danmakuStyle', v)}
