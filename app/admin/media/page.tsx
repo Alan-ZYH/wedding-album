@@ -155,13 +155,18 @@ function MediaPageContent() {
   const restoreMedia = (id: string) =>
     updateMedia(id, { status: 'active', displayState: 'pending' })
 
-  // The only path that touches Google Drive — reachable from the 刪除 tab alone
+  // Reachable from the 刪除 tab alone. Removes the record for good; the Drive
+  // original usually survives, because the service account may not delete it
   const purgeMedia = async (id: string) => {
-    if (!confirm('確定永久刪除？這會一併刪除 Google Drive 裡的檔案，無法復原。')) return
+    if (!confirm(
+      '確定從相簿永久移除？移除後無法在這裡復原。\n\n' +
+      'Google Drive 裡的原檔會保留——系統沒有刪除雲端檔案的權限。'
+    )) return
     setProcessing(id)
     try {
       const res = await fetch(`/api/media/${id}`, { method: 'DELETE' })
-      if ((await res.json()).success) {
+      const data = await res.json()
+      if (data.success) {
         setMedia((prev) => prev.filter((m) => m.id !== id))
         setSelected((prev) => { const n = new Set(prev); n.delete(id); return n })
       }
@@ -214,15 +219,19 @@ function MediaPageContent() {
 
     const ids = [...selected]
     if (!confirm(
-      `確定永久刪除 ${ids.length} 張照片？\n\n` +
-      `連同 Google Drive 裡的原檔一起刪除，無法復原。`
+      `確定從相簿永久移除 ${ids.length} 張照片？移除後無法在這裡復原。\n\n` +
+      `Google Drive 裡的原檔會保留——系統沒有刪除雲端檔案的權限。` +
+      `如果連原檔都要清掉，請到「概覽 → 照片原檔」手動刪除。`
     )) return
     setProcessing('batch')
+    let kept = 0
     try {
       await runBatch(ids, async (id) => {
         const res = await fetch(`/api/media/${id}`, { method: 'DELETE' })
-        if ((await res.json()).success) {
+        const data = await res.json()
+        if (data.success) {
           setMedia((prev) => prev.filter((m) => m.id !== id))
+          if (!data.driveDeleted) kept++
         }
       })
     } catch {}
@@ -230,6 +239,7 @@ function MediaPageContent() {
       setProcessing(null)
       setSelected(new Set())
     }
+    if (kept > 0) alert(`已從相簿移除。其中 ${kept} 張的原檔仍在 Google Drive，如需清除請手動刪除。`)
   }
 
   if (loading) return <div className="text-center py-16 text-gray-400">載入中...</div>
@@ -284,7 +294,7 @@ function MediaPageContent() {
             {inTrash ? '批次永久刪除' : '批次刪除'}
           </button>
           <span className="text-xs text-gray-400">
-            {inTrash ? '（永久刪除會連同雲端原檔一起刪掉）' : '（移到「刪除」，雲端檔案保留）'}
+            {inTrash ? '（從相簿永久移除，Google Drive 原檔保留）' : '（移到「刪除」，雲端檔案保留）'}
           </span>
           <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:text-gray-700 ml-auto shrink-0">取消</button>
         </div>
@@ -588,7 +598,7 @@ function MediaCard({
             </button>
             <button
               onClick={onPurge}
-              title="連同 Google Drive 檔案一起刪除"
+              title="從相簿永久移除（Google Drive 原檔保留）"
               className="text-[10px] py-1 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors leading-tight"
             >
               <span className="block text-xs">🗑️</span>

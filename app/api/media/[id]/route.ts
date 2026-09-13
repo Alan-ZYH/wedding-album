@@ -128,14 +128,21 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
 
     const media = doc.data() as Media
 
+    // Guest uploads are owned by the couple's Google account; the service
+    // account can write into the folder but not delete from it (403
+    // insufficientFilePermissions). So this usually fails, and the photo is
+    // still removed from the album — but the caller is told, rather than
+    // assured the original is gone when it is not.
+    let driveDeleted = false
     try {
       await deleteFileFromDrive(media.googleDriveFileId)
+      driveDeleted = true
     } catch (err) {
       console.error('Google Drive delete error:', err)
     }
 
     await docRef.delete()
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, driveDeleted })
   } catch (err) {
     console.error('DELETE /api/media/[id] error:', err)
     return NextResponse.json({ success: false, error: '刪除失敗' }, { status: 500 })
