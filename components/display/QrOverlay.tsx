@@ -51,12 +51,12 @@ export default function QrOverlay({
     >
       <div className="bg-white/95 rounded-2xl p-2.5 shadow-lg shadow-black/40">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={dataUrl} alt="上傳照片 QR Code" width={size} height={size} className="block" />
+        <img src={dataUrl} alt="分享照片與祝福 QR Code" width={size} height={size} className="block" />
         <p
-          className="text-center text-[#7a5c2e] font-medium mt-1"
+          className="text-center text-[#7a5c2e] font-medium mt-1 whitespace-nowrap"
           style={{ fontSize: Math.max(10, size * 0.075) }}
         >
-          掃描分享照片
+          掃描分享照片/祝福
         </p>
       </div>
     </div>
