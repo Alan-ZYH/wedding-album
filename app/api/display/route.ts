@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { PlaybackState } from '@/types'
+import { getSettings } from '@/lib/settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,37 +77,65 @@ export async function POST(req: NextRequest) {
       }
 
       const now = new Date().toISOString()
-      const batch = adminDb.batch()
-      batch.set(
-        PLAYBACK_DOC,
-        { controllerId: clientId, heartbeatAt: now, currentMediaId: currentMediaId ?? '' },
-        { merge: true }
-      )
+      const requested: string[] =
+        rotate?.promoteIds ?? (rotate?.promoteId ? [rotate.promoteId] : [])
+      const media = adminDb.collection(COLLECTIONS.MEDIA)
 
-      // Rule Y: the photo that just played steps aside for the next in the
-      // queue. playedId is optional — omitting it promotes into free slots
-      // without evicting anything, which is how a pool below capacity grows.
-      // promoteIds fills every free slot in one write rather than one per
-      // slide, so a pool starting from empty does not take minutes to fill.
-      const promote: string[] = rotate?.promoteIds ?? (rotate?.promoteId ? [rotate.promoteId] : [])
-      if (promote.length) {
-        if (rotate.playedId) {
-          batch.update(adminDb.collection(COLLECTIONS.MEDIA).doc(rotate.playedId), {
-            displayState: 'masked',
-            displayStateAt: now,
-          })
-        }
-        // Firestore batches cap at 500 writes; carouselSize maxes out at 100
-        for (const id of promote.slice(0, 200)) {
-          batch.update(adminDb.collection(COLLECTIONS.MEDIA).doc(id), {
-            displayState: 'playing',
-            displayStateAt: now,
-          })
-        }
+      const heartbeat = { controllerId: clientId, heartbeatAt: now, currentMediaId: currentMediaId ?? '' }
+
+      // Most advances only move the slide on. They must stay a single write:
+      // one runs every few seconds for the whole reception, and anything that
+      // reads per call would eat the daily Firestore read allowance.
+      if (requested.length === 0) {
+        await PLAYBACK_DOC.set(heartbeat, { merge: true })
+        return NextResponse.json({ success: true, isController: true, promoted: 0 })
       }
 
-      await batch.commit()
-      return NextResponse.json({ success: true, isController: true })
+      // The screen asks for promotions based on its own Firestore snapshot,
+      // and that snapshot lags behind the writes. With hundreds of photos
+      // arriving within a minute it asked for slots that were already taken,
+      // and because every write here was taken on trust the pool settled above
+      // its limit — photos marked 播放 that the screen would never draw.
+      //
+      // So the count is made here, in a transaction, against what is actually
+      // stored; the request only says which photos the screen would like next.
+      // A count aggregation costs about one read however large the pool is.
+      const { carouselSize = 50 } = await getSettings()
+      const promoted = await adminDb.runTransaction(async (tx) => {
+        const counted = await tx.get(
+          media.where('displayState', 'in', ['pinned', 'playing']).count()
+        )
+        let occupied = counted.data().count
+
+        const played = rotate?.playedId ? await tx.get(media.doc(rotate.playedId)) : null
+        const candidates = await Promise.all(
+          requested.slice(0, 100).map((id) => tx.get(media.doc(id)))
+        )
+
+        // Rule Y: the photo that just played steps aside — but only one that
+        // is really in 播放, never a pinned photo or one already gone.
+        if (played?.exists && played.data()?.displayState === 'playing') {
+          tx.update(played.ref, { displayState: 'masked', displayStateAt: now })
+          occupied -= 1
+        }
+
+        let count = 0
+        for (const doc of candidates) {
+          if (occupied >= carouselSize) break
+          const d = doc.data()
+          // An admin may have masked, pinned or deleted it since the screen
+          // last looked; only a photo still queued and visible may enter.
+          if (!doc.exists || d?.displayState !== 'pending' || d?.status !== 'active') continue
+          tx.update(doc.ref, { displayState: 'playing', displayStateAt: now })
+          occupied += 1
+          count += 1
+        }
+
+        tx.set(PLAYBACK_DOC, heartbeat, { merge: true })
+        return count
+      })
+
+      return NextResponse.json({ success: true, isController: true, promoted })
     }
 
     return NextResponse.json({ success: false, error: 'unknown action' }, { status: 400 })

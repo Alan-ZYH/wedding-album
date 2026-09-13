@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { collection, doc, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore'
+import { collection, doc, onSnapshot, query, where, orderBy } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Media, Message, Settings, DEFAULT_SETTINGS, PlaybackState, NamePosition } from '@/types'
 import DanmakuLayer from '@/components/display/DanmakuLayer'
@@ -87,34 +87,68 @@ export default function DisplayClient() {
     )
   }, [])
 
-  // ── Firestore: media (state split happens client-side) ──
-  // Ordered ascending on purpose: Firestore composite indexes are
-  // direction-specific and only the ascending one exists for this filter set.
-  // Ordering descending here silently fails the whole query, which empties the
-  // display. 800 covers a wedding comfortably.
+  // ── Firestore: media ─────────────────────────────────────────
+  // Two listeners, split by what the screen actually needs: the photos in the
+  // carousel, and the queue waiting to enter it. Masked photos are never shown,
+  // so they are never fetched.
+  //
+  // This replaced a single query for the oldest 800 active photos. Past 800 —
+  // about eight photos a guest at a hundred guests — every new upload fell
+  // outside that window: never queued, never promoted, never on screen.
+  //
+  // Neither query orders or limits, so neither needs a composite index (the
+  // existing one is ascending-only, and a mismatched one fails the whole query
+  // and blanks the display). Ordering and the approval filter happen in the
+  // useMemo below, which never relied on query order.
+  const [carouselDocs, setCarouselDocs] = useState<Media[]>([])
+  const [queueDocs, setQueueDocs] = useState<Media[]>([])
+  const loadedRef = useRef({ carousel: false, queue: false })
+
   useEffect(() => {
     if (!db) return
-    const q = query(
-      collection(db, 'media'),
-      where('status', '==', 'active'),
-      where('approved', '==', true),
-      orderBy('uploadTime', 'asc'),
-      limit(800)
+    const done = (which: 'carousel' | 'queue') => {
+      loadedRef.current[which] = true
+      if (loadedRef.current.carousel && loadedRef.current.queue) setLoading(false)
+    }
+    const visible = (snap: { docs: { data: () => unknown }[] }) =>
+      snap.docs.map((d) => d.data() as Media).filter((m) => m.approved)
+
+    const unsubCarousel = onSnapshot(
+      query(
+        collection(db, 'media'),
+        where('status', '==', 'active'),
+        where('displayState', 'in', ['pinned', 'playing'])
+      ),
+      (snap) => { setCarouselDocs(visible(snap)); done('carousel') },
+      () => done('carousel')
     )
-    return onSnapshot(q, (snap) => {
-      setAllMedia(snap.docs.map((d) => d.data() as Media))
-      setLoading(false)
-    }, () => setLoading(false))
+    const unsubQueue = onSnapshot(
+      query(
+        collection(db, 'media'),
+        where('status', '==', 'active'),
+        where('displayState', '==', 'pending')
+      ),
+      (snap) => { setQueueDocs(visible(snap)); done('queue') },
+      () => done('queue')
+    )
+    return () => { unsubCarousel(); unsubQueue() }
   }, [])
 
+  useEffect(() => {
+    setAllMedia([...carouselDocs, ...queueDocs])
+  }, [carouselDocs, queueDocs])
+
   // ── Firestore: messages ──────────────────────────────────────
+  // No limit: ascending with a limit kept the OLDEST blessings, so once there
+  // were more than the limit, every new one was silently left off the screen.
+  // Blessings are small and few, and the index (status, createdAt asc) still
+  // serves this query unchanged.
   useEffect(() => {
     if (!db) return
     const q = query(
       collection(db, 'messages'),
       where('status', '==', 'active'),
-      orderBy('createdAt', 'asc'),
-      limit(500)
+      orderBy('createdAt', 'asc')
     )
     return onSnapshot(q, (snap) => setMessages(snap.docs.map((d) => d.data() as Message)), () => {})
   }, [])
