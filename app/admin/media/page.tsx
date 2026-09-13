@@ -27,10 +27,11 @@ function MediaPageContent() {
   // Real-time listener — updates instantly when guests upload
   useEffect(() => {
     if (!db) return
-    // The tab counts are computed from this list, so it has to hold the whole
-    // album; 1000 was reachable at a large wedding once deleted and masked
-    // photos are included.
-    const q = query(collection(db, 'media'), orderBy('uploadTime', 'desc'), limit(5000))
+    // Every document this returns is a billed read each time the page opens,
+    // and on Firebase's free plan the whole project shares 50,000 reads a day —
+    // a load test exhausted it and took uploads down. 1000 keeps a reload
+    // affordable; past that the oldest photos drop off this list (newest stay).
+    const q = query(collection(db, 'media'), orderBy('uploadTime', 'desc'), limit(1000))
     const unsub = onSnapshot(q, (snap) => {
       setMedia(snap.docs.map((d) => d.data() as Media))
       setLoading(false)
