@@ -5,6 +5,8 @@ import { collection, onSnapshot, query, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Message, MessageDisplayState, DEFAULT_SETTINGS } from '@/types'
 import { useRealNames, withRealName, ADMIN_GUEST_ID } from '@/lib/guest-names'
+import BlessingColorPicker from '@/components/admin/BlessingColorPicker'
+import { BLESSING_COLORS, DEFAULT_BLESSING_COLOR } from '@/lib/blessing-colors'
 
 type StateFilter = 'all' | MessageDisplayState
 
@@ -23,7 +25,9 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
-  const [newMsg, setNewMsg] = useState({ guestName: '', message: '', pinned: false })
+  const [newMsg, setNewMsg] = useState<{ guestName: string; message: string; pinned: boolean; color: string | null }>(
+    { guestName: '', message: '', pinned: false, color: DEFAULT_BLESSING_COLOR }
+  )
   const [addingNew, setAddingNew] = useState(false)
   const [filter, setFilter] = useState('')
   const [stateFilter, setStateFilter] = useState<StateFilter>('all')
@@ -120,11 +124,12 @@ export default function MessagesPage() {
           message: newMsg.message,
           fromAdmin: true,
           pinned: newMsg.pinned,
+          color: newMsg.color,
         }),
       })
       const data = await res.json()
       if (data.success) {
-        setNewMsg({ guestName: '', message: '', pinned: false })
+        setNewMsg((p) => ({ guestName: '', message: '', pinned: false, color: p.color }))
         setAddingNew(false)
       } else {
         alert(data.error || '新增失敗')
@@ -184,6 +189,14 @@ export default function MessagesPage() {
             />
             📌 置頂（一直留在大螢幕輪播）
           </label>
+          <div className="mt-3">
+            <BlessingColorPicker
+              name={newMsg.guestName || '管理員'}
+              color={newMsg.color}
+              onChange={(c) => setNewMsg((p) => ({ ...p, color: c }))}
+            />
+            <p className="text-xs text-gray-400 mt-2">送出後顏色就固定，要換顏色請刪除後重發。</p>
+          </div>
           <div className="flex gap-2 mt-3">
             <button
               onClick={addMessage}
@@ -253,6 +266,13 @@ export default function MessagesPage() {
                       msg.fromAdmin || msg.guestId === ADMIN_GUEST_ID
                     )}
                   </span>
+                  {msg.color && (
+                    <span
+                      title={`色塊：${BLESSING_COLORS.find((c) => c.hex === msg.color)?.name ?? msg.color}`}
+                      className="w-3 h-3 rounded-full border border-black/10"
+                      style={{ backgroundColor: msg.color }}
+                    />
+                  )}
                   <span className={`text-xs px-2 py-0.5 rounded-full ${STATE_LABEL[st].className}`}>
                     {STATE_LABEL[st].text}
                   </span>

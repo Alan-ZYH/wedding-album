@@ -48,6 +48,13 @@ export interface Message {
   priority: number // 1 = normal, 2 = high
   fromAdmin?: boolean // posted from the admin panel — styled distinctly on screen
   /**
+   * Plate colour for a blessing from the couple, fixed at the moment it was
+   * sent. null or absent means no plate — it looks like any guest's. Stored on
+   * the message rather than read from settings, so choosing a colour for the
+   * next blessing can never recolour the ones already on screen.
+   */
+  color?: string | null
+  /**
    * Where the blessing sits in the danmaku rotation, mirroring photos minus the
    * queue: a new blessing goes straight on screen.
    *   pinned  → always in rotation, occupies a slot, never pushed out
@@ -93,7 +100,6 @@ export interface Settings {
   qrPosition: QrPosition
   qrSize: number            // px, rendered size of the QR block
   adminName: string         // name shown on photos and blessings posted by the couple
-  adminMessageColor: string // hex accent for the couple's blessings on screen
   guestNamePosition: NamePosition  // where "Photo by …" sits on screen
   guestNameSize: number            // px font size for that caption
 }
@@ -119,7 +125,6 @@ export const DEFAULT_SETTINGS: Settings = {
   qrPosition: 'bottom-right',
   qrSize: 160,
   adminName: '新人',
-  adminMessageColor: '#c9a84c',
   guestNamePosition: 'bottom-center',
   guestNameSize: 20,
 }

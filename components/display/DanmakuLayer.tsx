@@ -9,8 +9,6 @@ interface Props {
   density: number    // 1-5
   fontSize: number   // px
   danmakuStyle: DanmakuStyle
-  /** Accent for blessings posted by the couple, so theirs stand out. */
-  adminColor?: string
 }
 
 interface DanmakuItem {
@@ -20,7 +18,8 @@ interface DanmakuItem {
   left: number   // % for float/fade; 0 for scroll styles
   duration: number
   color: string
-  fromAdmin: boolean
+  /** Drawn on a tinted plate — a blessing the couple sent with a colour */
+  plate: boolean
 }
 
 const COLORS = [
@@ -35,7 +34,7 @@ const COLORS = [
 
 const MAX_ACTIVE_DANMAKU = 60
 
-export default function DanmakuLayer({ messages, speed, density, fontSize, danmakuStyle, adminColor = '#c9a84c' }: Props) {
+export default function DanmakuLayer({ messages, speed, density, fontSize, danmakuStyle }: Props) {
   const [active, setActive] = useState<DanmakuItem[]>([])
   const poolRef = useRef<Message[]>([])
   // 插播: blessings that arrived after the screen loaded fly next, ahead of
@@ -92,13 +91,6 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
   // delaying the next danmaku each time guests post in quick succession.
   const hasMessages = messages.length > 0
 
-  // The spawn loop below is created once and deliberately kept alive, so it
-  // would otherwise hold whatever colour was set at mount — which is the
-  // default, because settings arrive from Firestore a moment later. A ref lets
-  // `fire` read the colour the couple actually chose without restarting the
-  // loop and stalling the next danmaku.
-  const adminColorRef = useRef(adminColor)
-  adminColorRef.current = adminColor
   useEffect(() => {
     if (!hasMessages) return
 
@@ -139,8 +131,9 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
         top: topPct,
         left: leftPct,
         duration: duration + Math.random() * 2000,
-        color: msg.fromAdmin ? adminColorRef.current : color,
-        fromAdmin: !!msg.fromAdmin,
+        // The colour travels with the blessing, fixed when it was sent
+        color: msg.color ?? color,
+        plate: !!msg.color,
       }
 
       channelsRef.current = [...usedChannels, channel]
@@ -175,7 +168,7 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
           // The couple's blessings get a tinted plate rather than the plain
           // outline every other message uses, so they read as "from us"
           // without needing a label.
-          ...(item.fromAdmin
+          ...(item.plate
             ? {
                 padding: `${Math.round(fontSize * 0.28)}px ${Math.round(fontSize * 0.7)}px`,
                 borderRadius: '999px',

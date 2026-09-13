@@ -4,6 +4,7 @@ import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { checkGuestGate, gateErrorMessage, recordGuestAction } from '@/lib/guests'
 import { admitMessage, PinLimitError } from '@/lib/message-pool'
+import { isBlessingColor } from '@/lib/blessing-colors'
 import { sanitizeText, sanitizeName } from '@/lib/sanitize'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { Message } from '@/types'
@@ -103,6 +104,11 @@ export async function POST(req: NextRequest) {
       // for the whole site, so the couple posting from the guest page would
       // otherwise have their blessing styled as if it came from the panel.
       fromAdmin: isAdmin && body.fromAdmin === true,
+      // Frozen here, once. Only the couple gets a plate, only from the preset
+      // list, and nothing ever updates this field afterwards.
+      color: isAdmin && body.fromAdmin === true && isBlessingColor(body.color)
+        ? body.color.toLowerCase()
+        : null,
     }
 
     // Straight into rotation — a new blessing is shown right away and the

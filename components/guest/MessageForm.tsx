@@ -11,9 +11,11 @@ interface Props {
   fromAdmin?: boolean
   /** Offer 置頂 — the admin panel only; the server ignores it from guests. */
   allowPin?: boolean
+  /** Plate colour for this blessing, or null for none. Admin panel only. */
+  color?: string | null
 }
 
-export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, fromAdmin = false, allowPin = false }: Props) {
+export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, fromAdmin = false, allowPin = false, color = null }: Props) {
   const [message, setMessage] = useState('')
   const [pinned, setPinned] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -41,7 +43,7 @@ export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, 
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId, guestName, message: trimmed, fromAdmin, pinned: allowPin && pinned }),
+        body: JSON.stringify({ guestId, guestName, message: trimmed, fromAdmin, pinned: allowPin && pinned, color: fromAdmin ? color : null }),
       })
       const data = await res.json()
       if (data.success) {

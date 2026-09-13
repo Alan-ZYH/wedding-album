@@ -5,13 +5,11 @@ import { Settings, DEFAULT_SETTINGS } from '@/types'
 import UploadForm from '@/components/guest/UploadForm'
 import MessageForm from '@/components/guest/MessageForm'
 import { ADMIN_GUEST_ID } from '@/lib/guest-names'
+import BlessingColorPicker from '@/components/admin/BlessingColorPicker'
+import { DEFAULT_BLESSING_COLOR, isBlessingColor } from '@/lib/blessing-colors'
 
-const PRESET_COLORS = [
-  '#c9a84c', // 香檳金
-  '#e8b4b8', // 玫瑰粉
-  '#a8c5b5', // 霧綠
-  '#b8c4de', // 霧藍
-]
+const LAST_COLOR_KEY = 'wedding_admin_blessing_color'
+
 
 export default function AdminUploadPage() {
   const [tab, setTab] = useState<'upload' | 'message'>('upload')
@@ -31,17 +29,20 @@ export default function AdminUploadPage() {
 
   const adminName = settings.adminName || DEFAULT_SETTINGS.adminName
 
-  /** Colour is saved as soon as it is picked — the preview above is the whole
-   *  point, and a separate save button would just be a step between the two. */
-  const saveColor = async (color: string) => {
-    setSettings((s) => ({ ...s, adminMessageColor: color }))
+  // The colour for the NEXT blessing only. Remembered in this browser as a
+  // convenience, never saved anywhere shared: blessings already sent keep the
+  // colour they were sent with.
+  const [color, setColor] = useState<string | null>(DEFAULT_BLESSING_COLOR)
+  useEffect(() => {
     try {
-      await fetch('/api/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adminMessageColor: color }),
-      })
-    } catch { /* the next save, or the settings page, will catch up */ }
+      const saved = localStorage.getItem(LAST_COLOR_KEY)
+      if (saved === 'none') setColor(null)
+      else if (isBlessingColor(saved)) setColor(saved)
+    } catch { /* private mode — the default is fine */ }
+  }, [])
+  const chooseColor = (c: string | null) => {
+    setColor(c)
+    try { localStorage.setItem(LAST_COLOR_KEY, c ?? 'none') } catch {}
   }
 
   const saveName = async (value = nameDraft) => {
@@ -79,8 +80,8 @@ export default function AdminUploadPage() {
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium shrink-0"
             style={{
-              backgroundColor: `${settings.adminMessageColor ?? '#c9a84c'}22`,
-              color: settings.adminMessageColor ?? '#c9a84c',
+              backgroundColor: `${color ?? DEFAULT_BLESSING_COLOR}22`,
+              color: color ?? DEFAULT_BLESSING_COLOR,
             }}
           >
             {adminName.charAt(0)}
@@ -179,73 +180,17 @@ export default function AdminUploadPage() {
             cooldownSeconds={0}
             fromAdmin
             allowPin
+            color={color}
           />
-          <BlessingStyle
-            name={adminName}
-            color={settings.adminMessageColor ?? DEFAULT_SETTINGS.adminMessageColor}
-            onChange={saveColor}
-          />
+          <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+            <p className="text-sm font-medium text-gray-700 mb-2">這則祝福在大螢幕上的樣子</p>
+            <BlessingColorPicker name={adminName} color={color} onChange={chooseColor} />
+            <p className="text-xs text-gray-400 mt-3">
+              顏色跟著這一則走，送出後就固定，不會因為之後選別的顏色而改變。要換顏色請到「祝福管理」刪除後重發。
+            </p>
+          </div>
         </>
       )}
-    </div>
-  )
-}
-
-/**
- * The couple's blessings get a tinted plate on the projection so they read as
- * the hosts speaking rather than another guest. This lives beside the message
- * box rather than on the settings page: the colour only means anything next to
- * the preview of what it will look like.
- */
-function BlessingStyle({
-  name, color, onChange,
-}: {
-  name: string
-  color: string
-  onChange: (c: string) => void
-}) {
-  return (
-    <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-      <p className="text-sm font-medium text-gray-700 mb-2">大螢幕上的呈現方式</p>
-
-      {/* Previewed on the projection's dark ground, not this white page */}
-      <div className="bg-gray-900 rounded-lg py-5 px-3 flex justify-center mb-3">
-        <span
-          className="px-5 py-2 rounded-full text-base font-medium"
-          style={{
-            backgroundColor: `${color}26`,
-            color,
-            border: `1px solid ${color}66`,
-            boxShadow: `0 0 20px ${color}40`,
-          }}
-        >
-          {name || '新人'}：新婚快樂
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        {PRESET_COLORS.map((c) => (
-          <button
-            key={c}
-            onClick={() => onChange(c)}
-            title={c}
-            className={`w-9 h-9 rounded-full border-2 transition-transform hover:scale-110 ${
-              color.toLowerCase() === c.toLowerCase() ? 'border-gray-800 scale-110' : 'border-gray-200'
-            }`}
-            style={{ backgroundColor: c }}
-          />
-        ))}
-        <label className="flex items-center gap-2 ml-1 cursor-pointer">
-          <input
-            type="color"
-            value={color}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-9 h-9 rounded-full border-2 border-gray-200 cursor-pointer p-0 bg-transparent"
-          />
-          <span className="text-xs text-gray-400">自訂</span>
-        </label>
-        <code className="text-xs text-gray-400 ml-auto">{color}</code>
-      </div>
     </div>
   )
 }
