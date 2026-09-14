@@ -83,7 +83,7 @@ export async function admitMessage(opts: {
 
     if (evicted < overflow) {
       // Pins fill the rotation. A guest's blessing is still kept — it just
-      // waits out of rotation, where 投放 can bring it back later — but an
+      // waits out of rotation, where 播放 can bring it back later — but an
       // admin asking for something to play is told why it cannot.
       if (!opts.create) throw new RotationFullError(size)
       tx.set(opts.ref, { ...opts.create, displayState: 'masked', displayStateAt: now, ...opts.extra })
@@ -113,7 +113,7 @@ export async function admitMessage(opts: {
   })
 }
 
-/** Fields that put a blessing in the queue. `front` is 投放's jump ahead. */
+/** Fields that put a blessing in the queue. `front` is 播放's jump ahead. */
 export function queueFields(front = false) {
   const now = Date.now()
   return {
@@ -123,7 +123,7 @@ export function queueFields(front = false) {
   }
 }
 
-/** 投放: back into the queue, ahead of every guest's blessing. */
+/** 播放: back into the queue, ahead of every guest's blessing. */
 export async function requeueMessage(ref: DocumentReference, extra: Record<string, unknown> = {}) {
   await ref.update({ ...queueFields(true), playingSince: FieldValue.delete(), ...extra })
 }

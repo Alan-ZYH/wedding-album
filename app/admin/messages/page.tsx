@@ -13,12 +13,12 @@ type StateFilter = 'all' | MessageDisplayState
 const STATE_LABEL: Record<MessageDisplayState, { text: string; className: string }> = {
   pending: { text: '⏳ 待播',   className: 'bg-amber-50 text-amber-700' },
   pinned:  { text: '📌 置頂',   className: 'bg-[#c9a84c]/15 text-[#7a5c2e]' },
-  playing: { text: '▶️ 輪播中', className: 'bg-green-50 text-green-700' },
-  masked:  { text: '⬜ 已離開', className: 'bg-gray-100 text-gray-500' },
+  playing: { text: '▶️ 播放', className: 'bg-green-50 text-green-700' },
+  masked:  { text: '⬜ 遮蔽', className: 'bg-gray-100 text-gray-500' },
 }
 
 // Blessings written before the rotation existed carry no state; they are not
-// on screen, which is what 已離開 means
+// on screen, which is what 遮蔽 means
 const stateOf = (m: Message): MessageDisplayState => m.displayState ?? 'masked'
 
 export default function MessagesPage() {
@@ -220,9 +220,9 @@ export default function MessagesPage() {
         {([
           { st: 'all', label: '全部' },
           { st: 'pinned', label: '📌 置頂' },
-          { st: 'playing', label: '▶️ 輪播中' },
+          { st: 'playing', label: '▶️ 播放' },
           { st: 'pending', label: '⏳ 待播' },
-          { st: 'masked', label: '⬜ 已離開' },
+          { st: 'masked', label: '⬜ 遮蔽' },
         ] as { st: StateFilter; label: string }[]).map((t) => (
           <button
             key={t.st}
@@ -313,7 +313,7 @@ export default function MessagesPage() {
 
                 <p className="text-xs text-gray-400 mt-2">{new Date(msg.createdAt).toLocaleString('zh-TW')}</p>
 
-                {/* 置頂 / 投放 / 編輯 / 刪除 */}
+                {/* 置頂 / 播放 / 編輯 / 刪除 */}
                 <div className="grid grid-cols-4 gap-1.5 mt-3">
                   <button
                     onClick={() => send(msg.id, { action: st === 'pinned' ? 'unpin' : 'pin' })}
@@ -326,17 +326,17 @@ export default function MessagesPage() {
                   </button>
                   <button
                     onClick={() => send(msg.id, { action: 'play' })}
-                    // In rotation already — nothing to jump. From 已離開 or 待播 it
+                    // In rotation already — nothing to jump. From 遮蔽 or 待播 it
                     // goes to the front of the queue and flies next.
                     disabled={isBusy || st === 'playing' || st === 'pinned'}
                     title={
                       st === 'playing' || st === 'pinned'
-                        ? '已在輪播中'
+                        ? '已在播放'
                         : '排到待播最前面，下一則就飛；飛過後進入輪播，之後仍會被新祝福擠出'
                     }
                     className="text-xs py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:hover:bg-gray-100"
                   >
-                    ▶️ 投放
+                    ▶️ 播放
                   </button>
                   <button
                     onClick={() => { setEditingId(msg.id); setEditText(msg.message) }}

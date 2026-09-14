@@ -59,7 +59,7 @@ export interface Message {
    *   pending → queued; flies next, ahead of the rotation
    *   playing → has flown at least once; in rotation until pushed out
    *   pinned  → always in rotation, occupies a slot, never pushed out
-   *   masked  → out of rotation; 投放 queues it again
+   *   masked  → out of rotation; 播放 queues it again
    */
   displayState?: MessageDisplayState
   displayStateAt?: string
@@ -71,9 +71,9 @@ export interface Message {
   playingSince?: string
   /**
    * Position in the pending queue; the screen flies the lowest first. Normally
-   * the time it was queued, so the queue is first come first served. 投放 uses
+   * the time it was queued, so the queue is first come first served. 播放 uses
    * a negative time, which puts the couple's choice ahead of every guest's —
-   * and the latest 投放 ahead of an earlier one.
+   * and the latest 播放 ahead of an earlier one.
    */
   queueOrder?: number
 }

@@ -46,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
     const now = new Date().toISOString()
 
-    // ── Rotation actions: 置頂 / 取消置頂 / 投放 ─────────────────
+    // ── Rotation actions: 置頂 / 取消置頂 / 播放 ─────────────────
     try {
       if (body.action === 'pin') {
         await admitMessage({ ref: docRef, as: 'pinned', extra: { status: 'active', updatedAt: now } })
