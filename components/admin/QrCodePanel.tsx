@@ -54,12 +54,16 @@ export default function QrCodePanel({ albumName }: { albumName: string }) {
   }, [url])
 
   // ── Composed table card ─────────────────────────────────────
+  // Laid out top to bottom from one running cursor, so no block can land on
+  // another. The fixed positions this replaced drew a 760px code, which pushed
+  // the steps down into a footer pinned to the bottom edge.
   const downloadCard = useCallback(async () => {
     setBusy('card')
     try {
+      const QR_SIZE = 600
       const qr = document.createElement('canvas')
       await QRCode.toCanvas(qr, url, {
-        width: 760,
+        width: QR_SIZE,
         margin: 1,
         errorCorrectionLevel: 'M',
         color: { dark: '#3d2f14', light: '#ffffff' },
@@ -71,47 +75,70 @@ export default function QrCodePanel({ albumName }: { albumName: string }) {
       const ctx = canvas.getContext('2d')
       if (!ctx) return
 
+      const FRAME = 48
+      const cx = CARD_W / 2
+      const maxTextW = CARD_W - FRAME * 2 - 160
+
       // Cream ground with a thin gold frame
       ctx.fillStyle = '#fdf8f0'
       ctx.fillRect(0, 0, CARD_W, CARD_H)
       ctx.strokeStyle = GOLD
       ctx.lineWidth = 6
-      ctx.strokeRect(48, 48, CARD_W - 96, CARD_H - 96)
+      ctx.strokeRect(FRAME, FRAME, CARD_W - FRAME * 2, CARD_H - FRAME * 2)
 
       ctx.textAlign = 'center'
+      ctx.textBaseline = 'alphabetic'
 
-      ctx.fillStyle = INK
-      ctx.font = '600 84px "Noto Serif TC", Georgia, serif'
-      ctx.fillText(albumName || '婚禮紀念相簿', CARD_W / 2, 260)
+      /** Draw one line, shrinking the font until it fits inside the frame. */
+      const line = (text: string, y: number, size: number, font: (px: number) => string, color: string) => {
+        let px = size
+        ctx.font = font(px)
+        while (ctx.measureText(text).width > maxTextW && px > 24) {
+          px -= 2
+          ctx.font = font(px)
+        }
+        ctx.fillStyle = color
+        ctx.fillText(text, cx, y)
+      }
+      const serif = (px: number) => `600 ${px}px "Noto Serif TC", Georgia, serif`
+      const serifLight = (px: number) => `${px}px "Noto Serif TC", Georgia, serif`
+      const sans = (px: number) => `${px}px "Noto Sans TC", "PingFang TC", sans-serif`
+      const rule = (y: number, half: number) => {
+        ctx.strokeStyle = GOLD
+        ctx.lineWidth = 3
+        ctx.beginPath()
+        ctx.moveTo(cx - half, y)
+        ctx.lineTo(cx + half, y)
+        ctx.stroke()
+      }
 
-      // Divider
-      ctx.strokeStyle = GOLD
-      ctx.lineWidth = 3
-      ctx.beginPath()
-      ctx.moveTo(CARD_W / 2 - 180, 320)
-      ctx.lineTo(CARD_W / 2 + 180, 320)
-      ctx.stroke()
-
-      ctx.fillStyle = GOLD
-      ctx.font = '44px Georgia, serif'
-      ctx.fillText('掃描分享您的照片與祝福', CARD_W / 2, 400)
+      let y = FRAME + 170
+      line(albumName || '婚禮紀念相簿', y, 84, serif, INK)
+      y += 56
+      rule(y, 170)
+      y += 76
+      line('掃描分享您的照片與祝福', y, 44, serifLight, GOLD)
 
       // QR on a white plate
+      const PAD = 28
+      y += 56
       const qx = (CARD_W - qr.width) / 2
-      const qy = 470
+      const qy = y + PAD
       ctx.fillStyle = '#ffffff'
-      ctx.fillRect(qx - 28, qy - 28, qr.width + 56, qr.height + 56)
+      ctx.fillRect(qx - PAD, y, qr.width + PAD * 2, qr.height + PAD * 2)
       ctx.drawImage(qr, qx, qy)
+      y = qy + qr.height + PAD
 
-      ctx.fillStyle = INK
-      ctx.font = '46px "Noto Sans TC", sans-serif'
-      ctx.fillText('① 掃描 QR Code', CARD_W / 2, qy + qr.height + 130)
-      ctx.fillText('② 輸入您的名字', CARD_W / 2, qy + qr.height + 200)
-      ctx.fillText('③ 上傳照片、留下祝福', CARD_W / 2, qy + qr.height + 270)
+      y += 100
+      for (const step of ['① 掃描 QR Code', '② 填寫您的名字', '③ 上傳照片、留下祝福']) {
+        line(step, y, 46, sans, INK)
+        y += 70
+      }
 
-      ctx.fillStyle = GOLD
-      ctx.font = '38px Georgia, serif'
-      ctx.fillText('您的照片將即時出現在大螢幕上 ♡', CARD_W / 2, CARD_H - 150)
+      y += 20
+      rule(y, 110)
+      y += 64
+      line('您的照片與祝福將即時出現在大螢幕上 ♡', y, 38, serifLight, GOLD)
 
       saveCanvas(canvas, '婚禮相簿_桌卡.png')
     } finally { setBusy(null) }
