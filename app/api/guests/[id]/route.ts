@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
-import { LEAVE_ROTATION } from '@/lib/message-pool'
+import { leaveRotation } from '@/lib/message-pool'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,7 +64,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       }
       for (const doc of msgSnap.docs) {
         if (doc.data().status !== 'active') continue
-        batch.update(doc.ref, { status: 'hidden', ...LEAVE_ROTATION })
+        batch.update(doc.ref, { status: 'hidden', ...leaveRotation() })
         hiddenMessages++
         if (++pending >= 400) await flush()
       }
@@ -124,7 +124,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     }
     for (const doc of msgSnap.docs) {
       if (doc.data().status === 'deleted') continue
-      batch.update(doc.ref, { status: 'deleted', ...LEAVE_ROTATION })
+      batch.update(doc.ref, { status: 'deleted', ...leaveRotation() })
       deletedMessages++
       if (++pending >= 400) await flush()
     }

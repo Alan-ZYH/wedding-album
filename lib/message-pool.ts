@@ -37,10 +37,18 @@ export class RotationFullError extends Error {
 
 const inRotation = (s?: MessageDisplayState) => s === 'pinned' || s === 'playing'
 
-/** Fields that take a blessing out of rotation. */
-export const LEAVE_ROTATION = {
-  displayState: 'masked' as const,
-  playingSince: FieldValue.delete(),
+/**
+ * Fields that take a blessing out of rotation — or out of the queue. Stamps
+ * when it left, and clears both the rotation marker and any queue position,
+ * so nothing later mistakes it for something still waiting or still playing.
+ */
+export function leaveRotation() {
+  return {
+    displayState: 'masked' as const,
+    displayStateAt: new Date().toISOString(),
+    playingSince: FieldValue.delete(),
+    queueOrder: FieldValue.delete(),
+  }
 }
 
 /**
@@ -140,7 +148,7 @@ export async function promoteFlown(ref: DocumentReference): Promise<'promoted' |
     return r.skipped ? 'skipped' : 'promoted'
   } catch (err) {
     if (!(err instanceof RotationFullError)) throw err
-    await ref.update({ ...LEAVE_ROTATION, queueOrder: FieldValue.delete(), displayStateAt: new Date().toISOString() })
+    await ref.update(leaveRotation())
     return 'no-room'
   }
 }
@@ -149,7 +157,9 @@ export async function promoteFlown(ref: DocumentReference): Promise<'promoted' |
 async function evictOldest(tx: Transaction, n: number, exceptId: string): Promise<number> {
   const oldest = await tx.get(messages().orderBy('playingSince').limit(n + 1))
   const victims = oldest.docs.filter((d) => d.id !== exceptId).slice(0, n)
-  for (const d of victims) tx.update(d.ref, LEAVE_ROTATION)
+  // leaveRotation stamps the time it left; this used to keep the time it
+  // entered, so a pushed-out blessing appeared to have left hours too early
+  for (const d of victims) tx.update(d.ref, leaveRotation())
   return victims.length
 }
 

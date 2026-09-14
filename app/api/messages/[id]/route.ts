@@ -3,7 +3,7 @@ import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { sanitizeText } from '@/lib/sanitize'
 import { Message } from '@/types'
-import { admitMessage, unpinMessage, requeueMessage, LEAVE_ROTATION, PinLimitError, RotationFullError } from '@/lib/message-pool'
+import { admitMessage, unpinMessage, requeueMessage, leaveRotation, PinLimitError, RotationFullError } from '@/lib/message-pool'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +38,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       }
       if (body.status === 'deleted') {
         // Out of rotation too, or it would hold a slot nobody can see
-        Object.assign(updates, { status: 'deleted', ...LEAVE_ROTATION })
+        Object.assign(updates, { status: 'deleted', ...leaveRotation() })
       }
       await docRef.update(updates)
       return NextResponse.json({ success: true })
@@ -80,7 +80,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       updates.message = clean
     }
     if (body.status === 'hidden' || body.status === 'deleted') {
-      Object.assign(updates, { status: body.status, ...LEAVE_ROTATION })
+      Object.assign(updates, { status: body.status, ...leaveRotation() })
     }
 
     await docRef.update(updates)
@@ -105,7 +105,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     await adminDb.collection(COLLECTIONS.MESSAGES).doc(id).update({
       status: 'deleted',
       updatedAt: new Date().toISOString(),
-      ...LEAVE_ROTATION,
+      ...leaveRotation(),
     })
     return NextResponse.json({ success: true })
   } catch (err) {
