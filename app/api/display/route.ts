@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { PlaybackState } from '@/types'
 import { getSettings } from '@/lib/settings'
+import { promoteFlown } from '@/lib/message-pool'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +66,22 @@ export async function POST(req: NextRequest) {
         return true
       })
       return NextResponse.json({ success: true, isController })
+    }
+
+    // A queued blessing has flown on the controlling screen. Only that screen's
+    // report counts: followers fly the same queue, and letting every screen
+    // report would be a race to promote with no gain.
+    if (action === 'messageFlown') {
+      const { messageId } = body
+      if (!messageId) {
+        return NextResponse.json({ success: false, error: 'messageId required' }, { status: 400 })
+      }
+      const cur = (await PLAYBACK_DOC.get()).data() as PlaybackState | undefined
+      if (cur?.controllerId !== clientId) {
+        return NextResponse.json({ success: true, result: 'not-controller' })
+      }
+      const result = await promoteFlown(adminDb.collection(COLLECTIONS.MESSAGES).doc(String(messageId)))
+      return NextResponse.json({ success: true, result })
     }
 
     if (action === 'advance') {

@@ -6,9 +6,11 @@ import type { Message, MessageDisplayState } from '@/types'
 /**
  * The danmaku rotation: a fixed number of blessings cycling on screen.
  *
- * A new blessing enters straight away and the oldest one still playing makes
- * room. Pinned blessings take slots too but are never pushed out, so pins are
- * capped at the rotation size.
+ * A new blessing waits in a queue and flies ahead of the rotation. Only once it
+ * has flown does it enter the rotation, pushing out the oldest blessing there —
+ * which, being in the rotation, has flown too. So a surge of blessings delays
+ * some of them, but none is pushed out before anyone saw it. Pinned blessings
+ * take slots too but are never pushed out, so pins are capped at the size.
  *
  * Everything here runs on every blessing posted all evening, on a project
  * whose free plan shares 50,000 reads a day. So occupancy is a count
@@ -51,7 +53,9 @@ export async function admitMessage(opts: {
   as: 'playing' | 'pinned'
   create?: Omit<Message, 'displayState' | 'displayStateAt' | 'playingSince'>
   extra?: Record<string, unknown>
-}): Promise<{ evicted: number }> {
+  /** Only act if the blessing is still in this state (checked in the transaction) */
+  onlyFrom?: MessageDisplayState
+}): Promise<{ evicted: number; skipped?: boolean }> {
   const { messageCarouselSize: size = 20 } = await getSettings()
   const now = new Date().toISOString()
 
@@ -62,6 +66,9 @@ export async function admitMessage(opts: {
       opts.create ? Promise.resolve(null) : tx.get(opts.ref),
     ])
     const state = current?.data()?.displayState as MessageDisplayState | undefined
+    if (opts.onlyFrom && (state !== opts.onlyFrom || current?.data()?.status !== 'active')) {
+      return { evicted: 0, skipped: true }
+    }
     let occupied = occupiedAgg.data().count
     const pinned = pinnedAgg.data().count
 
@@ -98,11 +105,44 @@ export async function admitMessage(opts: {
         displayState: opts.as,
         displayStateAt: now,
         playingSince: opts.as === 'playing' ? now : FieldValue.delete(),
+        queueOrder: FieldValue.delete(),
         ...opts.extra,
       })
     }
     return { evicted }
   })
+}
+
+/** Fields that put a blessing in the queue. `front` is 投放's jump ahead. */
+export function queueFields(front = false) {
+  const now = Date.now()
+  return {
+    displayState: 'pending' as const,
+    displayStateAt: new Date(now).toISOString(),
+    queueOrder: front ? -now : now,
+  }
+}
+
+/** 投放: back into the queue, ahead of every guest's blessing. */
+export async function requeueMessage(ref: DocumentReference, extra: Record<string, unknown> = {}) {
+  await ref.update({ ...queueFields(true), playingSince: FieldValue.delete(), ...extra })
+}
+
+/**
+ * The screen reports a queued blessing has flown: it joins the rotation now,
+ * pushing out the oldest there. Ignored unless it is still queued — a second
+ * report, or one arriving after an admin removed it, changes nothing. If pins
+ * fill the rotation it has still been seen, so it simply steps out.
+ */
+export async function promoteFlown(ref: DocumentReference): Promise<'promoted' | 'skipped' | 'no-room'> {
+  try {
+    const r = await admitMessage({ ref, as: 'playing', onlyFrom: 'pending' })
+    return r.skipped ? 'skipped' : 'promoted'
+  } catch (err) {
+    if (!(err instanceof RotationFullError)) throw err
+    await ref.update({ ...LEAVE_ROTATION, queueOrder: FieldValue.delete(), displayStateAt: new Date().toISOString() })
+    return 'no-room'
+  }
 }
 
 /** The oldest `n` playing blessings leave rotation. Returns how many did. */

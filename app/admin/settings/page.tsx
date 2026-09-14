@@ -85,8 +85,8 @@ export default function SettingsPage() {
           </div>
         </Section>
 
-        {/* Slideshow section */}
-        <Section title="幻燈片設定" icon="🎞️">
+        {/* Photo carousel: playback timing and the pool itself, one place */}
+        <Section title="照片輪播池設定" icon="🎠">
           <SliderField
             label="幻燈片間隔（秒）"
             min={2} max={30} step={1}
@@ -104,10 +104,6 @@ export default function SettingsPage() {
             value={settings.requireApproval}
             onChange={(v) => update('requireApproval', v)}
           />
-        </Section>
-
-        {/* Carousel pool */}
-        <Section title="輪播池設定" icon="🎠">
           <SliderField
             label="輪播照片數量"
             min={20} max={100} step={5}
@@ -131,19 +127,53 @@ export default function SettingsPage() {
           />
         </Section>
 
-        {/* Video section */}
-        <Section title="影片設定" icon="🎬">
+        {/* Blessing carousel */}
+        <Section title="祝福輪播池設定" icon="💬">
           <ToggleField
-            label="播放影片"
-            description="開啟後影片會在投放端播放"
-            value={settings.playVideos}
-            onChange={(v) => update('playVideos', v)}
+            label="顯示彈幕"
+            description="在投放端顯示賓客祝福的滾動彈幕"
+            value={settings.showDanmaku}
+            onChange={(v) => update('showDanmaku', v)}
           />
-          <ToggleField
-            label="影片靜音"
-            description="建議開啟以避免婚禮現場音效干擾"
-            value={settings.muteVideos}
-            onChange={(v) => update('muteVideos', v)}
+          <SliderField
+            label="祝福輪播數量"
+            min={5} max={100} step={5}
+            value={settings.messageCarouselSize ?? 20}
+            onChange={(v) => update('messageCarouselSize', v)}
+            display={`${settings.messageCarouselSize ?? 20} 則`}
+          />
+          <p className="text-xs text-gray-400 -mt-2">
+            新祝福會先排隊，在大螢幕飛過一次後才進入輪播；輪播滿了就擠掉最舊的一則。置頂祝福也佔名額，但不會被擠掉。
+          </p>
+          {maskedMessages > 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              已將 {maskedMessages} 則最舊的祝福移出輪播，讓數量符合新的上限。
+            </p>
+          )}
+          <DanmakuStyleField
+            value={settings.danmakuStyle}
+            onChange={(v) => update('danmakuStyle', v)}
+          />
+          <SliderField
+            label="彈幕速度"
+            min={1} max={5} step={1}
+            value={settings.danmakuSpeed}
+            onChange={(v) => update('danmakuSpeed', v)}
+            display={['很慢', '慢', '適中', '快', '很快'][settings.danmakuSpeed - 1]}
+          />
+          <SliderField
+            label="彈幕密度"
+            min={1} max={5} step={1}
+            value={settings.danmakuDensity}
+            onChange={(v) => update('danmakuDensity', v)}
+            display={['很疏', '疏', '適中', '密', '很密'][settings.danmakuDensity - 1]}
+          />
+          <SliderField
+            label="彈幕字體大小"
+            min={16} max={48} step={2}
+            value={settings.danmakuFontSize}
+            onChange={(v) => update('danmakuFontSize', v)}
+            display={`${settings.danmakuFontSize}px`}
           />
         </Section>
 
@@ -206,56 +236,6 @@ export default function SettingsPage() {
                 ⚠️ QR Code 與名稱目前在同一個角落，投影時會重疊
               </p>
             )}
-        </Section>
-
-        {/* Danmaku section */}
-        <Section title="彈幕設定" icon="💬">
-          <ToggleField
-            label="顯示彈幕"
-            description="在投放端顯示賓客祝福的滾動彈幕"
-            value={settings.showDanmaku}
-            onChange={(v) => update('showDanmaku', v)}
-          />
-          <SliderField
-            label="祝福輪播數量"
-            min={5} max={100} step={5}
-            value={settings.messageCarouselSize ?? 20}
-            onChange={(v) => update('messageCarouselSize', v)}
-            display={`${settings.messageCarouselSize ?? 20} 則`}
-          />
-          <p className="text-xs text-gray-400 -mt-2">
-            大螢幕只輪播這麼多則，新祝福進來會擠掉最舊的一則。置頂祝福也佔名額，但不會被擠掉。
-          </p>
-          {maskedMessages > 0 && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              已將 {maskedMessages} 則最舊的祝福移出輪播，讓數量符合新的上限。
-            </p>
-          )}
-          <DanmakuStyleField
-            value={settings.danmakuStyle}
-            onChange={(v) => update('danmakuStyle', v)}
-          />
-          <SliderField
-            label="彈幕速度"
-            min={1} max={5} step={1}
-            value={settings.danmakuSpeed}
-            onChange={(v) => update('danmakuSpeed', v)}
-            display={['很慢', '慢', '適中', '快', '很快'][settings.danmakuSpeed - 1]}
-          />
-          <SliderField
-            label="彈幕密度"
-            min={1} max={5} step={1}
-            value={settings.danmakuDensity}
-            onChange={(v) => update('danmakuDensity', v)}
-            display={['很疏', '疏', '適中', '密', '很密'][settings.danmakuDensity - 1]}
-          />
-          <SliderField
-            label="彈幕字體大小"
-            min={16} max={48} step={2}
-            value={settings.danmakuFontSize}
-            onChange={(v) => update('danmakuFontSize', v)}
-            display={`${settings.danmakuFontSize}px`}
-          />
         </Section>
       </div>
     </div>

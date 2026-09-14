@@ -3,7 +3,7 @@ import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { sanitizeText } from '@/lib/sanitize'
 import { Message } from '@/types'
-import { admitMessage, unpinMessage, LEAVE_ROTATION, PinLimitError, RotationFullError } from '@/lib/message-pool'
+import { admitMessage, unpinMessage, requeueMessage, LEAVE_ROTATION, PinLimitError, RotationFullError } from '@/lib/message-pool'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,9 +57,13 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         return NextResponse.json({ success: true })
       }
       if (body.action === 'play') {
-        // Back into rotation as the newest — so the next blessings push it out
-        // again in turn, exactly like a fresh one
-        await admitMessage({ ref: docRef, as: 'playing', extra: { status: 'active', updatedAt: now } })
+        // To the front of the queue: it flies next, then joins the rotation and
+        // is pushed out again in turn, exactly like a fresh blessing. Something
+        // already in rotation has nothing to jump.
+        if (msg.displayState === 'playing' || msg.displayState === 'pinned') {
+          return NextResponse.json({ success: true })
+        }
+        await requeueMessage(docRef, { status: 'active', updatedAt: now })
         return NextResponse.json({ success: true })
       }
     } catch (err) {

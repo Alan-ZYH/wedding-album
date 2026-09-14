@@ -4,7 +4,12 @@ import { useState, useEffect, useRef } from 'react'
 import { Message, DanmakuStyle } from '@/types'
 
 interface Props {
+  /** The rotation — pinned and playing blessings, all of which have flown */
   messages: Message[]
+  /** Queued blessings, flown first, lowest queueOrder first */
+  queue: Message[]
+  /** Called as a queued blessing takes off; the controlling screen reports it */
+  onFlown?: (id: string) => void
   speed: number      // 1-5
   density: number    // 1-5
   fontSize: number   // px
@@ -34,13 +39,19 @@ const COLORS = [
 
 const MAX_ACTIVE_DANMAKU = 60
 
-export default function DanmakuLayer({ messages, speed, density, fontSize, danmakuStyle }: Props) {
+/** A queued blessing not yet promoted this long after flying is flown again —
+ *  the report may have been lost, or a new screen taken over control. */
+const REFLY_AFTER_MS = 30_000
+
+export default function DanmakuLayer({ messages, queue, onFlown, speed, density, fontSize, danmakuStyle }: Props) {
   const [active, setActive] = useState<DanmakuItem[]>([])
   const poolRef = useRef<Message[]>([])
-  // 插播: blessings that arrived after the screen loaded fly next, ahead of
-  // the rotation, so a guest who just posted sees theirs within seconds.
-  const seenRef = useRef<Set<string> | null>(null)
-  const urgentRef = useRef<Message[]>([])
+  const queueRef = useRef<Message[]>([])
+  queueRef.current = queue
+  const onFlownRef = useRef(onFlown)
+  onFlownRef.current = onFlown
+  // When each queued blessing last took off from this screen
+  const flownAtRef = useRef<Map<string, number>>(new Map())
   const channelsRef = useRef<number[]>([]) // track occupied y positions
   const activeCountRef = useRef(0) // mirrors active.length for use inside timers
   const numChannels = 8
@@ -50,27 +61,7 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
   }, [active.length])
 
   useEffect(() => {
-    // The first batch is the rotation as it stood on load — nothing to jump.
-    // Anything unseen after that is new, or was just 投放 back in.
-    if (seenRef.current === null) {
-      // The screen mounts with an empty list before Firestore answers; waiting
-      // for real data keeps the whole rotation from queueing as 插播 at once
-      if (messages.length === 0) return
-      seenRef.current = new Set(messages.map((m) => m.id))
-    } else {
-      for (const m of messages) {
-        if (!seenRef.current.has(m.id)) {
-          seenRef.current.add(m.id)
-          urgentRef.current.push(m)
-        }
-      }
-    }
-    // A blessing that left rotation may fly again later if it is 投放 back
-    const present = new Set(messages.map((m) => m.id))
-    for (const id of [...seenRef.current]) if (!present.has(id)) seenRef.current.delete(id)
-    urgentRef.current = urgentRef.current.filter((m) => present.has(m.id))
-
-    if (messages.length === 0) return
+    if (messages.length === 0) { poolRef.current = []; return }
 
     // Build weighted pool (priority messages appear more)
     const pool: Message[] = []
@@ -89,7 +80,7 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
   // The spawn loop reads poolRef, so it does NOT depend on `messages` itself —
   // otherwise every new blessing would tear down and restart the interval,
   // delaying the next danmaku each time guests post in quick succession.
-  const hasMessages = messages.length > 0
+  const hasMessages = messages.length + queue.length > 0
 
   useEffect(() => {
     if (!hasMessages) return
@@ -102,12 +93,31 @@ export default function DanmakuLayer({ messages, speed, density, fontSize, danma
     let poolIndex = 0
 
     const fire = () => {
-      if (poolRef.current.length === 0) return
       // Cap concurrent danmaku DOM nodes — protects the display device
       // during long events with many messages
       if (activeCountRef.current >= MAX_ACTIVE_DANMAKU) return
 
-      const msg = urgentRef.current.shift() ?? poolRef.current[poolIndex++ % poolRef.current.length]
+      // The queue goes first: a blessing waiting its turn is one nobody has
+      // seen yet. The rotation only plays once the queue is clear.
+      const now = Date.now()
+      const flown = flownAtRef.current
+      for (const id of [...flown.keys()]) {
+        if (!queueRef.current.some((m) => m.id === id)) flown.delete(id)
+      }
+      const queued = queueRef.current.find((m) => {
+        const at = flown.get(m.id)
+        return at === undefined || now - at > REFLY_AFTER_MS
+      })
+
+      let msg: Message
+      if (queued) {
+        msg = queued
+        flown.set(queued.id, now)
+        onFlownRef.current?.(queued.id)
+      } else {
+        if (poolRef.current.length === 0) return
+        msg = poolRef.current[poolIndex++ % poolRef.current.length]
+      }
 
       // Find free channel
       const usedChannels = channelsRef.current

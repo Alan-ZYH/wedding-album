@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { checkGuestGate, gateErrorMessage, recordGuestAction } from '@/lib/guests'
-import { admitMessage, PinLimitError } from '@/lib/message-pool'
+import { admitMessage, queueFields, PinLimitError } from '@/lib/message-pool'
 import { isBlessingColor } from '@/lib/blessing-colors'
 import { sanitizeText, sanitizeName } from '@/lib/sanitize'
 import { checkRateLimit } from '@/lib/rate-limit'
@@ -50,14 +50,18 @@ export async function POST(req: NextRequest) {
   // Open to anyone with the link; blocking and cooldown are enforced below.
   const isAdmin = await isAdminAuthenticated(req)
 
-  if (!checkRateLimit(req, 20)) {
-    return NextResponse.json({ success: false, error: '請求過於頻繁' }, { status: 429 })
-  }
-
   try {
     const body = await req.json()
 
     const guestId = body.guestId as string
+
+    // Keyed on IP and guest together, as uploads are. On IP alone, everyone on
+    // the venue WiFi — or behind one carrier's shared address — drew from a
+    // single allowance of 20 a minute, so the 21st guest to send a blessing
+    // after a toast was told 請求過於頻繁 for something they never did.
+    if (!checkRateLimit(req, 20, guestId || undefined)) {
+      return NextResponse.json({ success: false, error: '請求過於頻繁' }, { status: 429 })
+    }
     const guestNameRaw = body.guestName as string
     const messageRaw = body.message as string
 
@@ -111,16 +115,14 @@ export async function POST(req: NextRequest) {
         : null,
     }
 
-    // Straight into rotation — a new blessing is shown right away and the
-    // oldest one still playing makes room. The couple may pin theirs as they
-    // post; a guest never can.
+    // Into the queue: the screen flies it next, and only then does it join the
+    // rotation and push the oldest out. The couple may pin theirs as they post,
+    // which takes a slot at once; a guest never can.
+    const ref = adminDb.collection(COLLECTIONS.MESSAGES).doc(id)
     const pin = isAdmin && body.pinned === true
     try {
-      await admitMessage({
-        ref: adminDb.collection(COLLECTIONS.MESSAGES).doc(id),
-        as: pin ? 'pinned' : 'playing',
-        create: doc,
-      })
+      if (pin) await admitMessage({ ref, as: 'pinned', create: doc })
+      else await ref.set({ ...doc, ...queueFields() })
     } catch (err) {
       if (err instanceof PinLimitError) {
         return NextResponse.json({ success: false, error: err.message }, { status: 409 })

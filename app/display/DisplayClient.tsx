@@ -139,18 +139,38 @@ export default function DisplayClient() {
   }, [carouselDocs, queueDocs])
 
   // ── Firestore: messages ──────────────────────────────────────
-  // Only the rotation — pinned and playing — which the server keeps at the
-  // configured size. Blessings that were pushed out are never fetched, so the
-  // screen's reads stay flat however many guests write. Unordered, so no
-  // composite index is involved.
+  // The rotation (pinned and playing), kept at its size by the server, and the
+  // queue waiting to fly. Blessings pushed out are never fetched, so reads stay
+  // flat however many guests write. Neither query orders, so no composite
+  // index is involved; the queue is sorted here.
+  const [messageQueue, setMessageQueue] = useState<Message[]>([])
   useEffect(() => {
     if (!db) return
-    const q = query(
-      collection(db, 'messages'),
-      where('status', '==', 'active'),
-      where('displayState', 'in', ['pinned', 'playing'])
+    const unsubRotation = onSnapshot(
+      query(collection(db, 'messages'), where('status', '==', 'active'), where('displayState', 'in', ['pinned', 'playing'])),
+      (snap) => setMessages(snap.docs.map((d) => d.data() as Message)),
+      () => {}
     )
-    return onSnapshot(q, (snap) => setMessages(snap.docs.map((d) => d.data() as Message)), () => {})
+    const unsubQueue = onSnapshot(
+      query(collection(db, 'messages'), where('status', '==', 'active'), where('displayState', '==', 'pending')),
+      (snap) => setMessageQueue(
+        snap.docs.map((d) => d.data() as Message)
+          .sort((a, b) => (a.queueOrder ?? 0) - (b.queueOrder ?? 0))
+      ),
+      () => {}
+    )
+    return () => { unsubRotation(); unsubQueue() }
+  }, [])
+
+  // Only the controlling screen's word promotes a queued blessing; the server
+  // ignores anyone else, so followers simply don't send
+  const reportFlown = useCallback((id: string) => {
+    if (!ctrlRef.current) return
+    fetch('/api/display', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'messageFlown', clientId: clientIdRef.current, messageId: id }),
+    }).catch(() => { /* still queued — it flies again and reports again */ })
   }, [])
 
   // ── Playback position (multi-screen sync) ────────────────────
@@ -524,9 +544,11 @@ export default function DisplayClient() {
         />
       )}
 
-      {settings.showDanmaku && messages.length > 0 && (
+      {settings.showDanmaku && messages.length + messageQueue.length > 0 && (
         <DanmakuLayer
           messages={messages}
+          queue={messageQueue}
+          onFlown={reportFlown}
           speed={settings.danmakuSpeed}
           density={settings.danmakuDensity}
           fontSize={danmakuFontSize}

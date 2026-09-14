@@ -11,6 +11,7 @@ import { BLESSING_COLORS, DEFAULT_BLESSING_COLOR } from '@/lib/blessing-colors'
 type StateFilter = 'all' | MessageDisplayState
 
 const STATE_LABEL: Record<MessageDisplayState, { text: string; className: string }> = {
+  pending: { text: '⏳ 待播',   className: 'bg-amber-50 text-amber-700' },
   pinned:  { text: '📌 置頂',   className: 'bg-[#c9a84c]/15 text-[#7a5c2e]' },
   playing: { text: '▶️ 輪播中', className: 'bg-green-50 text-green-700' },
   masked:  { text: '⬜ 已離開', className: 'bg-gray-100 text-gray-500' },
@@ -65,6 +66,7 @@ export default function MessagesPage() {
   const visible = messages.filter((m) => m.status !== 'deleted')
   const counts = {
     all: visible.length,
+    pending: visible.filter((m) => stateOf(m) === 'pending').length,
     pinned: visible.filter((m) => stateOf(m) === 'pinned').length,
     playing: visible.filter((m) => stateOf(m) === 'playing').length,
     masked: visible.filter((m) => stateOf(m) === 'masked').length,
@@ -151,6 +153,7 @@ export default function MessagesPage() {
           <p className="text-sm text-gray-400">
             大螢幕輪播 {counts.pinned + counts.playing} / {size} 則
             {counts.pinned > 0 && ` · 其中置頂 ${counts.pinned}`}
+            {counts.pending > 0 && ` · 待播 ${counts.pending}`}
           </p>
         </div>
         <button
@@ -218,6 +221,7 @@ export default function MessagesPage() {
           { st: 'all', label: '全部' },
           { st: 'pinned', label: '📌 置頂' },
           { st: 'playing', label: '▶️ 輪播中' },
+          { st: 'pending', label: '⏳ 待播' },
           { st: 'masked', label: '⬜ 已離開' },
         ] as { st: StateFilter; label: string }[]).map((t) => (
           <button
@@ -322,9 +326,14 @@ export default function MessagesPage() {
                   </button>
                   <button
                     onClick={() => send(msg.id, { action: 'play' })}
-                    // Already on screen — nothing to bring back
-                    disabled={isBusy || st !== 'masked'}
-                    title={st === 'masked' ? '重新放回輪播，之後有新祝福時仍會被擠出' : '已在輪播中'}
+                    // In rotation already — nothing to jump. From 已離開 or 待播 it
+                    // goes to the front of the queue and flies next.
+                    disabled={isBusy || st === 'playing' || st === 'pinned'}
+                    title={
+                      st === 'playing' || st === 'pinned'
+                        ? '已在輪播中'
+                        : '排到待播最前面，下一則就飛；飛過後進入輪播，之後仍會被新祝福擠出'
+                    }
                     className="text-xs py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:hover:bg-gray-100"
                   >
                     ▶️ 投放

@@ -55,11 +55,11 @@ export interface Message {
    */
   color?: string | null
   /**
-   * Where the blessing sits in the danmaku rotation, mirroring photos minus the
-   * queue: a new blessing goes straight on screen.
+   * Where the blessing sits in the danmaku rotation — the same shape as photos.
+   *   pending → queued; flies next, ahead of the rotation
+   *   playing → has flown at least once; in rotation until pushed out
    *   pinned  → always in rotation, occupies a slot, never pushed out
-   *   playing → in rotation until newer blessings push it out
-   *   masked  → out of rotation; 投放 brings it back
+   *   masked  → out of rotation; 投放 queues it again
    */
   displayState?: MessageDisplayState
   displayStateAt?: string
@@ -69,9 +69,16 @@ export interface Message {
    * index — instead of reading the whole rotation on every new blessing.
    */
   playingSince?: string
+  /**
+   * Position in the pending queue; the screen flies the lowest first. Normally
+   * the time it was queued, so the queue is first come first served. 投放 uses
+   * a negative time, which puts the couple's choice ahead of every guest's —
+   * and the latest 投放 ahead of an earlier one.
+   */
+  queueOrder?: number
 }
 
-export type MessageDisplayState = 'pinned' | 'playing' | 'masked'
+export type MessageDisplayState = 'pending' | 'pinned' | 'playing' | 'masked'
 
 export type SlideTransition = 'fade' | 'slide' | 'zoom' | 'none'
 export type DanmakuStyle = 'scroll' | 'scroll-reverse' | 'float' | 'fade'
