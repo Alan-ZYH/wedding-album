@@ -81,25 +81,32 @@ export async function recordGuestAction(
   const { windowSec } = action !== 'message' && limits ? limits : COOLDOWN[action]
   const t = TRACK[action]
 
-  const existing = await getGuest(guestId)
-  const startedAt = existing?.[t.at]
-  const used = existing?.[t.used] ?? 0
-  const windowExpired =
-    !startedAt || (Date.now() - new Date(startedAt).getTime()) / 1000 >= windowSec
+  // In a transaction: files in a batch upload side by side and complete within
+  // milliseconds of each other. Read-then-write without one let three
+  // completions each read "0 used" and each write "1", so a 3-photo batch was
+  // recorded as one and the cooldown never engaged.
+  await adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    const existing = snap.exists ? (snap.data() as Guest) : null
+    const startedAt = existing?.[t.at]
+    const used = existing?.[t.used] ?? 0
+    const windowExpired =
+      !startedAt || (Date.now() - new Date(startedAt).getTime()) / 1000 >= windowSec
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const patch: Record<string, any> = {
-    guestId,
-    guestName,
-    lastActiveAt: now,
-    blocked: existing?.blocked ?? false,
-    firstSeenAt: existing?.firstSeenAt ?? now,
-    [t.count]: FieldValue.increment(1),
-  }
-  if (windowExpired) { patch[t.at] = now; patch[t.used] = 1 }
-  else { patch[t.used] = used + 1 }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const patch: Record<string, any> = {
+      guestId,
+      guestName,
+      lastActiveAt: now,
+      blocked: existing?.blocked ?? false,
+      firstSeenAt: existing?.firstSeenAt ?? now,
+      [t.count]: FieldValue.increment(1),
+    }
+    if (windowExpired) { patch[t.at] = now; patch[t.used] = 1 }
+    else { patch[t.used] = used + 1 }
 
-  await ref.set(patch, { merge: true })
+    tx.set(ref, patch, { merge: true })
+  })
 }
 
 /** Human-readable rejection for the guest-facing API responses. */

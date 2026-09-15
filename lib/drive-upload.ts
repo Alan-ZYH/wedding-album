@@ -19,7 +19,7 @@
  *  - Every chunk but the last must be a multiple of 256 KiB.
  */
 
-const CHUNK = 8 * 1024 * 1024 // 32 × 256 KiB
+export const CHUNK = 8 * 1024 * 1024 // 32 × 256 KiB
 
 export interface DriveSession {
   uploadUrl: string

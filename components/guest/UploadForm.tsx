@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { uploadToDrive, mimeOf, videoThumbnail, UploadAborted, FinalResponseUnreadable, type DriveSession } from '@/lib/drive-upload'
+import { uploadToDrive, mimeOf, videoThumbnail, UploadAborted, FinalResponseUnreadable, CHUNK, type DriveSession } from '@/lib/drive-upload'
 
 const MAX_IMAGE_MB = 30
 const MAX_VIDEO_MB = 500
@@ -195,6 +195,29 @@ export default function UploadForm({
         }
         session = { uploadUrl: data.uploadUrl, sent: 0, mediaId: data.mediaId, fileName: data.fileName }
         patch(it.key, { session })
+      }
+
+      // A retry of a file that may already be in Drive: the last attempt could
+      // have delivered every byte and lost only the answer. Resending then is
+      // not harmless — Drive, given the final chunk again long after finishing,
+      // stores a second copy (seen in testing, 14 minutes on). So ask the server
+      // to look for it by name first, and only upload what is not there.
+      // Only the final chunk can have finished the file; a failure before it
+      // means Drive is still waiting, and resuming is safe.
+      const finalChunkWasInFlight = session.sent + CHUNK >= it.file.size
+      if (session.driveId === undefined && it.status === 'failed' && finalChunkWasInFlight) {
+        const probe = await fetch('/api/upload/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mediaId: session.mediaId, guestId, guestName, fileName: session.fileName,
+            mimeType: it.mime, fileSize: it.file.size, albumOnly: isAlbum,
+          }),
+        }).then((r) => r.json()).catch(() => null)
+        if (probe?.success) {
+          patch(it.key, { status: 'done', progress: 1 })
+          return 'done'
+        }
       }
 
       if (session.driveId === undefined) {
