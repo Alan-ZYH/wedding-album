@@ -63,7 +63,8 @@ export async function POST(req: NextRequest) {
         const snap = await tx.get(PLAYBACK_DOC)
         const cur = snap.data() as PlaybackState | undefined
         if (cur?.controllerId === clientId) {
-          if (!!cur?.controllerHidden !== hidden) {
+          // Only a screen that reports its visibility may change the flag
+          if (typeof body.visible === 'boolean' && !!cur?.controllerHidden !== hidden) {
             tx.set(PLAYBACK_DOC, { controllerHidden: hidden }, { merge: true })
           }
           return true
