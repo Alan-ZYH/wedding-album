@@ -5,8 +5,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { DEFAULT_SETTINGS } from '@/types'
-import { photoLimits, UNTHROTTLED_MAX_FILES, type PhotoLimits } from '@/lib/upload-limits'
-import { photosOpen, messagesOpen } from '@/lib/guest-access'
+import { photoLimits, albumLimits, UNTHROTTLED_MAX_FILES, ALBUM_MAX_FILES, type PhotoLimits } from '@/lib/upload-limits'
+import { photosOpen, messagesOpen, albumOpen } from '@/lib/guest-access'
 import ClosedNotice from '@/components/guest/ClosedNotice'
 import GuestLogin from '@/components/guest/GuestLogin'
 import UploadForm from '@/components/guest/UploadForm'
@@ -30,7 +30,8 @@ export default function GuestPage() {
   const [mounted, setMounted] = useState(false)
   const [albumName, setAlbumName] = useState(DEFAULT_SETTINGS.albumName)
   const [limits, setLimits] = useState<PhotoLimits>(photoLimits(DEFAULT_SETTINGS))
-  const [open, setOpen] = useState({ photos: true, messages: true })
+  const [albumLim, setAlbumLim] = useState<PhotoLimits>(albumLimits(DEFAULT_SETTINGS))
+  const [open, setOpen] = useState({ photos: true, messages: true, album: true })
   const [editingName, setEditingName] = useState(false)
 
   useEffect(() => {
@@ -63,7 +64,8 @@ export default function GuestPage() {
           // The admin can change the upload limits mid-reception; the picker
           // and the hint follow at once. The server enforces the same values.
           setLimits(photoLimits(data))
-          setOpen({ photos: photosOpen(data), messages: messagesOpen(data) })
+          setAlbumLim(albumLimits(data))
+          setOpen({ photos: photosOpen(data), messages: messagesOpen(data), album: albumOpen(data) })
         }
       },
       () => {} // ignore errors, keep default
@@ -166,13 +168,19 @@ export default function GuestPage() {
 
       {/* Content */}
       <main className="max-w-lg mx-auto px-4 py-6">
-        {activeTab === 'upload' && !open.photos && <ClosedNotice title="上傳照片" />}
-        {activeTab === 'upload' && open.photos && (
+        {/* The tab is closed only when both ways in are: the screen and the album */}
+        {activeTab === 'upload' && !open.photos && !open.album && <ClosedNotice title="上傳照片" />}
+        {activeTab === 'upload' && (open.photos || open.album) && (
           <UploadForm
             guestId={guest.guestId}
             guestName={guest.guestName}
             maxFiles={limits.enabled ? limits.burst : UNTHROTTLED_MAX_FILES}
             cooldownSeconds={limits.enabled ? limits.windowSec : 0}
+            projectionOpen={open.photos}
+            album={open.album ? {
+              maxFiles: albumLim.enabled ? albumLim.burst : ALBUM_MAX_FILES,
+              cooldownSeconds: albumLim.enabled ? albumLim.windowSec : 0,
+            } : null}
             onViewUploads={() => setActiveTab('myUploads')}
           />
         )}

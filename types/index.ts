@@ -37,6 +37,22 @@ export interface Media {
   sortOrder?: number
 }
 
+/** A photo or video a guest kept for the couple — stored in `album`, never projected. */
+export interface AlbumItem {
+  id: string
+  guestId: string
+  guestName: string
+  fileType: FileType
+  fileName: string
+  mimeType: string
+  fileSize: number
+  googleDriveFileId: string
+  googleDriveUrl: string
+  thumbnailUrl: string
+  uploadTime: string // ISO
+  status: 'active' | 'deleted'
+}
+
 export interface Message {
   id: string
   guestId: string
@@ -104,6 +120,9 @@ export interface Settings {
   messageCarouselSize: number // max blessings in the danmaku rotation (pinned + playing)
   guestPhotosOpen: boolean       // guests may upload photos (the couple always may)
   guestMessagesOpen: boolean     // guests may send blessings (the couple always may)
+  guestAlbumOpen: boolean        // guests may keep photos and videos for the couple
+  albumMaxFiles: number          // files per album batch / per window
+  albumCooldownSec: number       // seconds a guest waits after an album batch
   uploadThrottleEnabled: boolean // guest photo cooldown on/off (blocking always applies)
   uploadBurst: number            // photos a guest may send per batch / per window
   uploadCooldownSec: number      // seconds a guest waits after a batch
@@ -134,6 +153,9 @@ export const DEFAULT_SETTINGS: Settings = {
   messageCarouselSize: 20,
   guestPhotosOpen: true,
   guestMessagesOpen: true,
+  guestAlbumOpen: true,
+  albumMaxFiles: 100,
+  albumCooldownSec: 30,
   uploadThrottleEnabled: true,
   uploadBurst: 3,
   uploadCooldownSec: 30,
@@ -178,6 +200,9 @@ export interface Guest {
   photoBurst?: number      // uploads already used inside that window (max 3)
   lastMessageAt?: string   // start of the current blessing cooldown window
   messageBurst?: number    // blessings already used inside that window (max 1)
+  lastAlbumAt?: string     // start of the current album cooldown window
+  albumBurst?: number      // album files already used inside that window
+  albumCount?: number
   photoCount: number
   messageCount: number
   blocked: boolean

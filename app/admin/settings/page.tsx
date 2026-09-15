@@ -94,6 +94,12 @@ export default function SettingsPage() {
             onChange={(v) => update('guestPhotosOpen', v)}
           />
           <ToggleField
+            label="開放存入新人相簿"
+            description="賓客可以把照片、影片私下存給新人，不會上大螢幕"
+            value={settings.guestAlbumOpen !== false}
+            onChange={(v) => update('guestAlbumOpen', v)}
+          />
+          <ToggleField
             label="開放送上祝福"
             description="關閉後賓客端顯示「目前尚未開放，期待幸福降臨」。新人上傳不受影響"
             value={settings.guestMessagesOpen !== false}
@@ -102,11 +108,12 @@ export default function SettingsPage() {
           <div className="border-t border-gray-100" />
           <ToggleField
             label="啟用上傳限流"
-            description="關閉後賓客可連續上傳，一次最多 50 張。被封鎖的賓客仍然無法上傳"
+            description="同時控制投影照片與存入新人相簿。關閉後投影一次最多 50 張、相簿最多 100 個，且不用等待；被封鎖的賓客仍然無法上傳"
             value={settings.uploadThrottleEnabled !== false}
             onChange={(v) => update('uploadThrottleEnabled', v)}
           />
           <div className={settings.uploadThrottleEnabled === false ? 'opacity-40 pointer-events-none space-y-4' : 'space-y-4'}>
+            <p className="text-xs font-medium text-gray-500">📸 投影照片</p>
             <SliderField
               label="每次最多張數"
               min={1} max={20} step={1}
@@ -121,10 +128,24 @@ export default function SettingsPage() {
               onChange={(v) => update('uploadCooldownSec', v)}
               display={(settings.uploadCooldownSec ?? 30) === 0 ? '不用等' : `${settings.uploadCooldownSec ?? 30} 秒`}
             />
-            <p className="text-xs text-gray-400 -mt-2">
-              賓客一次選 {settings.uploadBurst ?? 3} 張傳完後，
-              {(settings.uploadCooldownSec ?? 30) === 0 ? '可以馬上再傳下一批' : `要等 ${settings.uploadCooldownSec ?? 30} 秒才能再傳`}。
-              上傳失敗不計入。儲存後立即生效，賓客端不用重新整理。
+
+            <p className="text-xs font-medium text-gray-500 pt-2">💝 存入新人相簿</p>
+            <SliderField
+              label="每次最多檔案數"
+              min={10} max={100} step={10}
+              value={settings.albumMaxFiles ?? 100}
+              onChange={(v) => update('albumMaxFiles', v)}
+              display={`${settings.albumMaxFiles ?? 100} 個`}
+            />
+            <SliderField
+              label="上傳後等待秒數"
+              min={0} max={180} step={5}
+              value={settings.albumCooldownSec ?? 30}
+              onChange={(v) => update('albumCooldownSec', v)}
+              display={(settings.albumCooldownSec ?? 30) === 0 ? '不用等' : `${settings.albumCooldownSec ?? 30} 秒`}
+            />
+            <p className="text-xs text-gray-400">
+              兩者各自計算：傳完投影照片不影響存相簿，反之亦然。上傳失敗不計入。儲存後立即生效，賓客端不用重新整理。
             </p>
           </div>
         </Section>

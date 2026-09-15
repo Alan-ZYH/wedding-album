@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSettings } from '@/lib/settings'
-import { photoLimits, initRequestsPerMinute } from '@/lib/upload-limits'
-import { photosOpen, CLOSED_MESSAGE } from '@/lib/guest-access'
+import { photoLimits, albumLimits, initRequestsPerMinute } from '@/lib/upload-limits'
+import { photosOpen, albumOpen, CLOSED_MESSAGE } from '@/lib/guest-access'
 import { v4 as uuidv4 } from 'uuid'
 import { createResumableUploadSession } from '@/lib/google-drive'
 import { validateFile, sanitizeName } from '@/lib/sanitize'
@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const { guestId, guestNameRaw, mimeType, fileSize, originalName } = body
+    // 存入新人相簿：kept for the couple, never projected, videos allowed
+    const albumOnly = body.albumOnly === true
 
     if (!guestId || !guestNameRaw) {
       return NextResponse.json({ success: false, error: '缺少賓客資訊' }, { status: 400 })
@@ -41,11 +43,11 @@ export async function POST(req: NextRequest) {
     // The admin's switches and limits, read per request so a change in 設定
     // applies to the very next photo
     const settings = await getSettings()
-    const limits = photoLimits(settings)
+    const limits = albumOnly ? albumLimits(settings) : photoLimits(settings)
 
     // Closed to guests: the page shows the same message, but a page loaded
     // before the switch — or a direct request — is refused here all the same
-    if (!admin && !photosOpen(settings)) {
+    if (!admin && !(albumOnly ? albumOpen(settings) : photosOpen(settings))) {
       return NextResponse.json({ success: false, error: CLOSED_MESSAGE, reason: 'closed' }, { status: 403 })
     }
 
@@ -58,7 +60,7 @@ export async function POST(req: NextRequest) {
 
     // Block list + 30s cooldown (admins bypass both)
     if (!admin) {
-      const gate = await checkGuestGate(guestId, 'photo', limits)
+      const gate = await checkGuestGate(guestId, albumOnly ? 'album' : 'photo', limits)
       if (!gate.ok) {
         return NextResponse.json(
           {
@@ -77,7 +79,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: '名稱無效' }, { status: 400 })
     }
 
-    const validation = validateFile(mimeType || '', fileSize || 0)
+    const validation = validateFile(mimeType || '', fileSize || 0, albumOnly ? 'album' : 'projection')
     if (!validation.valid) {
       return NextResponse.json({ success: false, error: validation.error }, { status: 400 })
     }
@@ -102,6 +104,7 @@ export async function POST(req: NextRequest) {
       mediaId,
       fileName,
       fileType: validation.fileType, // 'photo' | 'video'
+      albumOnly,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

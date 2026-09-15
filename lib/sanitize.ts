@@ -23,12 +23,12 @@ export function sanitizeName(input: string): string {
   return stripHtml(input).slice(0, 50)
 }
 
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
-const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime']
-const MAX_IMAGE_MB = 30
+export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+export const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-m4v', 'video/3gpp', 'video/webm']
+export const MAX_IMAGE_MB = 30
+export const MAX_VIDEO_MB = 500
 const MAX_IMAGE_SIZE = MAX_IMAGE_MB * 1024 * 1024
-const MAX_VIDEO_SIZE = 500 * 1024 * 1024  // 500 MB (duration capped client-side)
-const MAX_FILES = 20
+const MAX_VIDEO_SIZE = MAX_VIDEO_MB * 1024 * 1024
 
 export interface FileValidation {
   valid: boolean
@@ -36,17 +36,23 @@ export interface FileValidation {
   fileType?: 'photo' | 'video'
 }
 
-export function validateFile(mimeType: string, fileSize: number): FileValidation {
+/**
+ * `projection` takes photos only — the screen no longer plays video. `album`
+ * takes photos and videos, which only the couple will ever open.
+ */
+export function validateFile(
+  mimeType: string,
+  fileSize: number,
+  mode: 'projection' | 'album' = 'projection'
+): FileValidation {
   if (ALLOWED_IMAGE_TYPES.includes(mimeType)) {
     if (fileSize > MAX_IMAGE_SIZE) return { valid: false, error: `圖片大小不可超過 ${MAX_IMAGE_MB}MB` }
     return { valid: true, fileType: 'photo' }
   }
   if (ALLOWED_VIDEO_TYPES.includes(mimeType)) {
-    if (fileSize > MAX_VIDEO_SIZE) return { valid: false, error: `影片大小不可超過 500MB` }
+    if (mode !== 'album') return { valid: false, error: '投影只接受照片，影片請存入新人相簿' }
+    if (fileSize > MAX_VIDEO_SIZE) return { valid: false, error: `影片大小不可超過 ${MAX_VIDEO_MB}MB` }
     return { valid: true, fileType: 'video' }
   }
-  // HEIC by extension fallback
-  return { valid: false, error: `不支援的檔案格式：${mimeType}` }
+  return { valid: false, error: `不支援的檔案格式：${mimeType || '未知'}` }
 }
-
-export { MAX_FILES }

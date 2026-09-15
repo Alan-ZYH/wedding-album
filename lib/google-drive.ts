@@ -135,6 +135,20 @@ export async function setDriveFilePublic(
   }
 }
 
+/**
+ * Confirm a file id the browser read from Drive's upload response really is
+ * the file this upload created — its name carries the random suffix init
+ * issued, so a guest cannot attach someone else's file by sending its id.
+ */
+export async function getDriveFileIfNamed(fileId: string, expectedName: string): Promise<boolean> {
+  try {
+    const info = await getDriveClient().files.get({ fileId, fields: 'id,name', supportsAllDrives: true })
+    return info.data.name === expectedName
+  } catch {
+    return false
+  }
+}
+
 // Search Google Drive for a file by its exact name.
 // Returns the file ID if found, or null.
 export async function findFileByName(fileName: string): Promise<string | null> {

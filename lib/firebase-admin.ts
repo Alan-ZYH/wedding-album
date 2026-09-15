@@ -38,4 +38,12 @@ export const COLLECTIONS = {
   MESSAGES: 'messages',
   SETTINGS: 'settings',
   GUESTS: 'guests',
+  /**
+   * Photos and videos guests keep for the couple, never projected. A separate
+   * collection rather than a flag on media: the Firestore rules close it to
+   * browsers (checked), so what guests share privately cannot be listed by
+   * anyone querying the public media collection — and it cannot crowd the
+   * projection photos out of 媒體管理.
+   */
+  ALBUM: 'album',
 } as const

@@ -7,6 +7,7 @@ const NAV = [
   { href: '/admin/dashboard', label: '概覽', icon: '📊' },
   { href: '/admin/upload', label: '上傳', icon: '⬆️' },
   { href: '/admin/media', label: '媒體', icon: '🖼️' },
+  { href: '/admin/album', label: '相簿', icon: '📚' },
   { href: '/admin/messages', label: '祝福', icon: '💌' },
   { href: '/admin/guests', label: '賓客', icon: '👥' },
   { href: '/admin/settings', label: '設定', icon: '⚙️' },

@@ -158,7 +158,9 @@ async function backupMedia({ dryRun = false } = {}) {
   })
 
   // Firestore 記錄外的孤兒檔案（上傳第二步失敗留下的）也一併備份
-  const tracked = new Set((await db.collection('media').get()).docs.map((d) => d.data().googleDriveFileId))
+  // 投影照片在 media、存入新人相簿的在 album，兩邊都算有記錄
+  const [mediaSnap, albumSnap] = await Promise.all([db.collection('media').get(), db.collection('album').get()])
+  const tracked = new Set([...mediaSnap.docs, ...albumSnap.docs].map((d) => d.data().googleDriveFileId))
   const orphans = source.filter((f) => !tracked.has(f.id)).length
 
   console.log(`   來源 ${source.length} 個｜已備份 ${source.length - todo.length} 個｜待備份 ${todo.length} 個`)

@@ -17,6 +17,14 @@ export const COOLDOWN = {
   // Photo defaults only — the live values come from 設定 via photoLimits()
   photo: { windowSec: 30, burst: 3 },
   message: { windowSec: 30, burst: 1 },
+  album: { windowSec: 30, burst: 100 },
+} as const
+
+/** Where each action keeps its window, its use within it, and its lifetime tally. */
+const TRACK = {
+  photo: { at: 'lastPhotoAt', used: 'photoBurst', count: 'photoCount' },
+  message: { at: 'lastMessageAt', used: 'messageBurst', count: 'messageCount' },
+  album: { at: 'lastAlbumAt', used: 'albumBurst', count: 'albumCount' },
 } as const
 
 export type GuestAction = keyof typeof COOLDOWN
@@ -43,11 +51,12 @@ export async function checkGuestGate(
   // Blocking holds whatever the limits say; turning limits off only lifts the
   // cooldown
   if (guest.blocked) return { ok: false, reason: 'blocked' }
-  if (action === 'photo' && limits && (!limits.enabled || limits.windowSec === 0)) return { ok: true }
+  if (action !== 'message' && limits && (!limits.enabled || limits.windowSec === 0)) return { ok: true }
 
-  const { windowSec, burst } = action === 'photo' && limits ? limits : COOLDOWN[action]
-  const startedAt = action === 'photo' ? guest.lastPhotoAt : guest.lastMessageAt
-  const used = (action === 'photo' ? guest.photoBurst : guest.messageBurst) ?? 0
+  const { windowSec, burst } = action !== 'message' && limits ? limits : COOLDOWN[action]
+  const t = TRACK[action]
+  const startedAt = guest[t.at]
+  const used = guest[t.used] ?? 0
   if (!startedAt) return { ok: true }
 
   const elapsed = (Date.now() - new Date(startedAt).getTime()) / 1000
@@ -69,11 +78,12 @@ export async function recordGuestAction(
 ): Promise<void> {
   const ref = adminDb.collection(COLLECTIONS.GUESTS).doc(guestId)
   const now = new Date().toISOString()
-  const { windowSec } = action === 'photo' && limits ? limits : COOLDOWN[action]
+  const { windowSec } = action !== 'message' && limits ? limits : COOLDOWN[action]
+  const t = TRACK[action]
 
   const existing = await getGuest(guestId)
-  const startedAt = action === 'photo' ? existing?.lastPhotoAt : existing?.lastMessageAt
-  const used = (action === 'photo' ? existing?.photoBurst : existing?.messageBurst) ?? 0
+  const startedAt = existing?.[t.at]
+  const used = existing?.[t.used] ?? 0
   const windowExpired =
     !startedAt || (Date.now() - new Date(startedAt).getTime()) / 1000 >= windowSec
 
@@ -84,15 +94,10 @@ export async function recordGuestAction(
     lastActiveAt: now,
     blocked: existing?.blocked ?? false,
     firstSeenAt: existing?.firstSeenAt ?? now,
-    [action === 'photo' ? 'photoCount' : 'messageCount']: FieldValue.increment(1),
+    [t.count]: FieldValue.increment(1),
   }
-  if (action === 'photo') {
-    if (windowExpired) { patch.lastPhotoAt = now; patch.photoBurst = 1 }
-    else { patch.photoBurst = used + 1 }
-  } else {
-    if (windowExpired) { patch.lastMessageAt = now; patch.messageBurst = 1 }
-    else { patch.messageBurst = used + 1 }
-  }
+  if (windowExpired) { patch[t.at] = now; patch[t.used] = 1 }
+  else { patch[t.used] = used + 1 }
 
   await ref.set(patch, { merge: true })
 }

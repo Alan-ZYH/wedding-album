@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { collection, query, where, onSnapshot, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { Media, Message } from '@/types'
+import { Media, Message, AlbumItem } from '@/types'
 
 interface Props {
   guestId: string
@@ -18,6 +18,8 @@ export default function MyUploads({ guestId }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
   const [msgBusy, setMsgBusy] = useState<string | null>(null)
+  const [albumItems, setAlbumItems] = useState<AlbumItem[]>([])
+  const [albumPreview, setAlbumPreview] = useState<AlbumItem | null>(null)
 
   // Real-time listener — updates immediately after upload or hide
   useEffect(() => {
@@ -41,6 +43,35 @@ export default function MyUploads({ guestId }: Props) {
     )
     return () => unsub()
   }, [guestId])
+
+  // What they kept for the couple. The album collection is closed to browsers,
+  // so it comes through the API; polled, since a snapshot listener cannot reach it.
+  useEffect(() => {
+    let alive = true
+    const load = () =>
+      fetch(`/api/album/mine?guestId=${encodeURIComponent(guestId)}`)
+        .then((r) => r.json())
+        .then((d) => { if (alive && d.success) setAlbumItems(d.data) })
+        .catch(() => {})
+    load()
+    const t = setInterval(load, 20_000)
+    return () => { alive = false; clearInterval(t) }
+  }, [guestId])
+
+  const removeAlbumItem = async (id: string) => {
+    if (!confirm('確定要從新人相簿移除這個檔案嗎？')) return
+    setDeleting(id)
+    try {
+      const res = await fetch(`/api/album/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guestId, status: 'deleted' }),
+      })
+      if ((await res.json()).success) setAlbumItems((prev) => prev.filter((a) => a.id !== id))
+      else alert('移除失敗，請稍後再試')
+    } catch {}
+    finally { setDeleting(null) }
+  }
 
   // The guest's own blessings, managed alongside their photos so there is one
   // place to review everything they contributed.
@@ -115,7 +146,7 @@ export default function MyUploads({ guestId }: Props) {
     )
   }
 
-  if (media.length === 0 && messages.length === 0) {
+  if (media.length === 0 && messages.length === 0 && albumItems.length === 0) {
     return (
       <div className="py-12 text-center">
         <div className="text-4xl mb-3">📭</div>
@@ -130,7 +161,7 @@ export default function MyUploads({ guestId }: Props) {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-serif text-[#7a5c2e]">我的上傳</h2>
         <span className="text-xs text-gray-400">
-          {media.length} 個檔案 · {messages.length} 則祝福
+          {media.length} 張投影 · {albumItems.length} 個存相簿 · {messages.length} 則祝福
         </span>
       </div>
 
@@ -187,6 +218,61 @@ export default function MyUploads({ guestId }: Props) {
           </div>
         ))}
       </div>
+      )}
+
+      {/* Kept for the couple — never on the screen */}
+      {albumItems.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-sm font-medium text-gray-600 mb-3">💝 存入新人相簿</h3>
+          <div className="grid grid-cols-3 gap-2">
+            {albumItems.map((item) => (
+              <div key={item.id} className="relative aspect-square bg-gray-800 rounded-xl overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={item.thumbnailUrl}
+                  alt={item.fileName}
+                  loading="lazy"
+                  className="w-full h-full object-cover cursor-pointer"
+                  onClick={() => setAlbumPreview(item)}
+                  onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden' }}
+                />
+                {item.fileType === 'video' && (
+                  <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded pointer-events-none">▶ 影片</span>
+                )}
+                <button
+                  onClick={() => removeAlbumItem(item.id)}
+                  disabled={deleting === item.id}
+                  aria-label="從相簿移除"
+                  className="absolute bottom-1.5 right-1.5 bg-black/70 hover:bg-red-600 active:bg-red-600 text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
+                >
+                  {deleting === item.id ? '移除中' : <><span>🗑</span><span>移除</span></>}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {albumPreview && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setAlbumPreview(null)}>
+          <button className="absolute top-4 right-4 text-white text-2xl" onClick={() => setAlbumPreview(null)}>×</button>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg">
+            {albumPreview.fileType === 'photo' ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`https://lh3.googleusercontent.com/d/${albumPreview.googleDriveFileId}=w1920`}
+                alt={albumPreview.fileName}
+                className="max-w-full max-h-[80vh] object-contain rounded-lg mx-auto"
+              />
+            ) : (
+              <iframe
+                src={`https://drive.google.com/file/d/${albumPreview.googleDriveFileId}/preview`}
+                allow="autoplay"
+                className="w-full aspect-video rounded-lg bg-black"
+              />
+            )}
+          </div>
+        </div>
       )}
 
       {/* My blessings — editable in the same place as the photos */}

@@ -2,6 +2,8 @@ import { DEFAULT_SETTINGS, type Settings } from '@/types'
 
 /** How many photos one selection may hold when the admin turns limits off. */
 export const UNTHROTTLED_MAX_FILES = 50
+/** The album's ceiling per selection, limits on or off. */
+export const ALBUM_MAX_FILES = 100
 
 export interface PhotoLimits {
   enabled: boolean
@@ -25,6 +27,22 @@ export function photoLimits(s: Partial<Settings>): PhotoLimits {
     enabled: s.uploadThrottleEnabled !== false,
     burst: clamp(s.uploadBurst, 1, 20, DEFAULT_SETTINGS.uploadBurst),
     windowSec: clamp(s.uploadCooldownSec, 0, 600, DEFAULT_SETTINGS.uploadCooldownSec),
+  }
+}
+
+/**
+ * Limits for 存入新人相簿. Its own count and wait, but the same master switch:
+ * 啟用上傳限流 governs every guest upload.
+ */
+export function albumLimits(s: Partial<Settings>): PhotoLimits {
+  const clamp = (v: unknown, lo: number, hi: number, dflt: number) => {
+    const n = typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : dflt
+    return Math.min(hi, Math.max(lo, n))
+  }
+  return {
+    enabled: s.uploadThrottleEnabled !== false,
+    burst: clamp(s.albumMaxFiles, 1, ALBUM_MAX_FILES, DEFAULT_SETTINGS.albumMaxFiles),
+    windowSec: clamp(s.albumCooldownSec, 0, 600, DEFAULT_SETTINGS.albumCooldownSec),
   }
 }
 

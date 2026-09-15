@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
-import { findFileByName, setDriveFilePublic, buildThumbnailUrl } from '@/lib/google-drive'
+import { findFileByName, getDriveFileIfNamed, setDriveFilePublic, buildThumbnailUrl } from '@/lib/google-drive'
 import { getSettings } from '@/lib/settings'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { recordGuestAction } from '@/lib/guests'
-import { photoLimits } from '@/lib/upload-limits'
-import { Media } from '@/types'
+import { photoLimits, albumLimits } from '@/lib/upload-limits'
+import { Media, AlbumItem } from '@/types'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -14,9 +14,10 @@ export const maxDuration = 60
  * POST /api/upload/complete
  *
  * Called by the browser after it has uploaded a file directly to Google Drive.
- * Because CORS prevents the browser from reading the Drive upload response,
- * we don't receive the fileId from the client — instead we search Drive by
- * the exact fileName generated in /api/upload/init.
+ * The browser can read Drive's response (Drive answers with CORS headers for
+ * the site — checked), so it sends the file id, which is confirmed by name.
+ * Searching Drive by the exact fileName from /api/upload/init remains as the
+ * fallback for a client that could not read it.
  *
  * Body (JSON):
  *   mediaId    string
@@ -34,17 +35,26 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { mediaId, guestId, guestName, fileName, mimeType, fileSize, fileType } = body
+    const { mediaId, guestId, guestName, fileName, mimeType, fileSize } = body
+    const albumOnly = body.albumOnly === true
+    // Decided here from the type, never taken from the client
+    const fileType = String(mimeType || '').startsWith('video/') ? 'video' : 'photo'
+    if (fileType === 'video' && !albumOnly) {
+      return NextResponse.json({ success: false, error: '投影只接受照片' }, { status: 400 })
+    }
 
     if (!mediaId || !guestId || !guestName || !fileName) {
       return NextResponse.json({ success: false, error: '缺少必要資訊' }, { status: 400 })
     }
 
-    // Find the file in Drive by its exact name.
-    // Keep total retry time well under Vercel Hobby's 10s limit:
-    // 4 attempts with 700ms gaps ≈ 2.1s sleep + query time.
-    let googleDriveFileId: string | null = null
-    for (let attempt = 0; attempt < 4; attempt++) {
+    // Prefer the id the browser read from Drive, confirmed by name. Otherwise
+    // search by the exact name — Drive's index can lag a moment behind the
+    // upload, hence a few short retries.
+    let googleDriveFileId: string | null =
+      typeof body.googleDriveFileId === 'string' && (await getDriveFileIfNamed(body.googleDriveFileId, fileName))
+        ? body.googleDriveFileId
+        : null
+    for (let attempt = 0; !googleDriveFileId && attempt < 4; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 700))
       googleDriveFileId = await findFileByName(fileName)
       if (googleDriveFileId) break
@@ -61,16 +71,35 @@ export async function POST(req: NextRequest) {
     // Make the Drive file publicly readable
     const { webViewLink } = await setDriveFilePublic(googleDriveFileId)
 
-    // Load approval settings
     const settings = await getSettings()
+    const now = new Date()
+
+    if (albumOnly) {
+      const item: AlbumItem = {
+        id: mediaId,
+        guestId,
+        guestName,
+        fileType,
+        fileName,
+        mimeType,
+        fileSize,
+        googleDriveFileId,
+        googleDriveUrl: webViewLink,
+        thumbnailUrl: buildThumbnailUrl(googleDriveFileId),
+        uploadTime: now.toISOString(),
+        status: 'active',
+      }
+      await adminDb.collection(COLLECTIONS.ALBUM).doc(mediaId).set(item)
+      if (!admin) await recordGuestAction(guestId, guestName, 'album', albumLimits(settings))
+      return NextResponse.json({ success: true, mediaId })
+    }
 
     // Persist metadata to Firestore
-    const now = new Date()
     const media: Media = {
       id: mediaId,
       guestId,
       guestName,
-      fileType: fileType ?? 'photo',
+      fileType,
       fileName,
       mimeType,
       fileSize,
