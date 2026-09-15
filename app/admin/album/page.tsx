@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Guest } from '@/types'
 import type { AlbumEntry } from '@/app/api/admin/album/route'
 import { ADMIN_GUEST_ID, withRealName } from '@/lib/guest-names'
@@ -31,10 +31,13 @@ export default function AlbumPage() {
   const [person, setPerson] = useState('')
   const [preview, setPreview] = useState<AlbumEntry | null>(null)
   const [busy, setBusy] = useState(false)
+  // Entries that arrived while the page was open, marked briefly
+  const [fresh, setFresh] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
+  const loadGuests = useCallback(() => {
     fetch('/api/guests').then((r) => r.json()).then((d) => { if (d.success) setGuests(d.data) }).catch(() => {})
   }, [])
+  useEffect(() => { loadGuests() }, [loadGuests])
 
   const realNames = useMemo(
     () => Object.fromEntries(guests.filter((g) => g.realName).map((g) => [g.guestId, g.realName!])),
@@ -75,6 +78,50 @@ export default function AlbumPage() {
   // Reload from the top whenever the person changes
   useEffect(() => { load(true) }, [person]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Live arrivals ───────────────────────────────────────────
+  // Every few seconds, ask for anything newer than the newest entry shown and
+  // put it on top. Paused while the tab is hidden, so a panel left open in the
+  // background does not keep reading.
+  const entriesRef = useRef(entries)
+  entriesRef.current = entries
+  // Server timestamps only: starting from this computer's clock would miss
+  // anything uploaded within however far that clock runs ahead of the server
+  const sinceRef = useRef<string>('')
+  useEffect(() => {
+    const newest = entries[0]?.uploadTime
+    if (newest && newest > sinceRef.current) sinceRef.current = newest
+  }, [entries])
+
+  useEffect(() => {
+    if (loading) return
+    let stop = false
+    const tick = async () => {
+      if (stop || document.visibilityState !== 'visible') return
+      try {
+        // An empty album has no timestamp to start from; anything at all is new
+        const res = await fetch(`/api/admin/album?since=${encodeURIComponent(sinceRef.current || '0')}`)
+        const d = await res.json()
+        if (stop || !d.success || !d.data.length) return
+        const chosen = people.find((p) => p.label === person)
+        const known = new Set(entriesRef.current.map((e) => e.id))
+        const arrivals = (d.data as AlbumEntry[]).filter(
+          (e) => !known.has(e.id) && (!chosen || chosen.guestIds.includes(e.guestId))
+        )
+        sinceRef.current = (d.data as AlbumEntry[])[0].uploadTime
+        if (!arrivals.length) return
+        setEntries((prev) => [...arrivals, ...prev])
+        setFresh((prev) => new Set([...prev, ...arrivals.map((e) => e.id)]))
+        setTimeout(() => setFresh((prev) => {
+          const next = new Set(prev); arrivals.forEach((e) => next.delete(e.id)); return next
+        }), 6000)
+        // A first-time guest has no entry in the name list yet
+        if (arrivals.some((e) => e.guestId !== ADMIN_GUEST_ID && !guests.some((g) => g.guestId === e.guestId))) loadGuests()
+      } catch { /* try again next tick */ }
+    }
+    const t = setInterval(tick, 5000)
+    return () => { stop = true; clearInterval(t) }
+  }, [loading, person, people, guests, loadGuests])
+
   const project = async (entry: AlbumEntry) => {
     if (!confirm('把這張照片加入投影？它會進入「待播」，之後出現在大螢幕上。')) return
     setBusy(true)
@@ -101,7 +148,8 @@ export default function AlbumPage() {
       <div className="flex flex-wrap gap-3 justify-between items-end mb-4">
         <div>
           <h1 className="text-2xl font-serif text-gray-800">相簿</h1>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-gray-400 flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-green-600"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />即時</span>
             {loading ? '載入中…' : `${person ? '' : '已載入 '}${entries.length} 個 · 投影 ${counts.projection} · 存相簿 ${counts.album}${counts.video ? ` · 影片 ${counts.video}` : ''}`}
           </p>
         </div>
@@ -126,7 +174,9 @@ export default function AlbumPage() {
             <button
               key={e.id}
               onClick={() => setPreview(e)}
-              className="relative aspect-square bg-gray-800 rounded-xl overflow-hidden text-left group"
+              className={`relative aspect-square bg-gray-800 rounded-xl overflow-hidden text-left group transition-shadow ${
+                fresh.has(e.id) ? 'ring-4 ring-[#c9a84c] ring-offset-2' : ''
+              }`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -138,6 +188,9 @@ export default function AlbumPage() {
               />
               {e.fileType === 'video' && (
                 <span className="absolute inset-0 flex items-center justify-center text-3xl drop-shadow pointer-events-none">▶️</span>
+              )}
+              {fresh.has(e.id) && (
+                <span className="absolute top-1.5 right-1.5 text-[10px] px-1.5 py-0.5 rounded bg-red-500 text-white animate-pulse">新</span>
               )}
               <span className={`absolute top-1.5 left-1.5 text-[10px] px-1.5 py-0.5 rounded ${
                 e.source === 'album' ? 'bg-[#c9a84c] text-white' : 'bg-black/60 text-white'

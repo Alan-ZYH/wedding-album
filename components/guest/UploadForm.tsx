@@ -402,27 +402,66 @@ export default function UploadForm({
     <div>
       <h2 className="text-lg font-serif text-[#7a5c2e] mb-4">上傳照片</h2>
 
-      {/* 存入新人相簿 */}
+      {/* Where these files go. Two explicit choices rather than a checkbox: an
+          unticked box says nothing, and guests could not tell that leaving it
+          empty meant the big screen. */}
       {album && (
-        <div className={`rounded-2xl border p-4 mb-4 transition-colors ${inAlbum ? 'border-[#c9a84c] bg-[#fdf8f0]' : 'border-[#e8d5a3] bg-white'}`}>
-          <label className={`flex items-start gap-3 ${albumForced || uploading ? '' : 'cursor-pointer'}`}>
-            <input
-              type="checkbox"
-              checked={inAlbum}
-              disabled={albumForced || uploading}
-              onChange={(e) => switchMode(e.target.checked)}
-              className="mt-1 w-5 h-5 accent-[#c9a84c] shrink-0"
-            />
-            <span>
-              <span className="block text-sm font-medium text-[#7a5c2e]">僅存入新人相簿，不上大螢幕</span>
-              <span className="block text-xs text-gray-500 mt-1 leading-relaxed">
-                有想私下分享給新人的照片或影片嗎？存進相簿就好，不會出現在大螢幕上。
-              </span>
-              {albumForced && (
-                <span className="block text-xs text-amber-700 mt-1">目前大螢幕投影尚未開放，檔案會存入新人相簿</span>
-              )}
-            </span>
-          </label>
+        <div className="mb-4">
+          <p className="text-sm font-medium text-gray-700 mb-2">這些照片要分享到哪裡？</p>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup">
+            {([
+              {
+                toAlbum: false,
+                icon: '📺',
+                title: '大螢幕投影',
+                desc: '在婚宴現場的大螢幕上輪播，大家都看得到',
+                rule: `照片・一次最多 ${maxFiles} 張`,
+                disabled: albumForced,
+                off: '目前尚未開放',
+              },
+              {
+                toAlbum: true,
+                icon: '💝',
+                title: '私下給新人',
+                desc: '不上大螢幕，只有新人看得到',
+                rule: `照片、影片・一次最多 ${album.maxFiles} 個`,
+                disabled: false,
+                off: '',
+              },
+            ]).map((opt) => {
+              const selected = inAlbum === opt.toAlbum
+              const locked = uploading || opt.disabled
+              return (
+                <button
+                  key={opt.title}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={locked && !selected}
+                  onClick={() => { if (!selected && !locked) switchMode(opt.toAlbum) }}
+                  className={`relative text-left rounded-2xl border-2 p-3 transition-colors ${
+                    selected
+                      ? 'border-[#c9a84c] bg-[#fdf8f0]'
+                      : opt.disabled
+                      ? 'border-gray-200 bg-gray-50 opacity-60'
+                      : 'border-gray-200 bg-white hover:border-[#e8d5a3]'
+                  }`}
+                >
+                  <span className={`absolute top-3 right-3 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                    selected ? 'border-[#c9a84c]' : 'border-gray-300'
+                  }`}>
+                    {selected && <span className="w-2 h-2 rounded-full bg-[#c9a84c]" />}
+                  </span>
+                  <span className="block text-2xl leading-none mb-1.5">{opt.icon}</span>
+                  <span className={`block text-sm font-medium ${selected ? 'text-[#7a5c2e]' : 'text-gray-700'}`}>{opt.title}</span>
+                  <span className="block text-xs text-gray-500 mt-1 leading-snug">{opt.desc}</span>
+                  <span className={`block text-[11px] mt-2 ${selected ? 'text-[#c9a84c]' : 'text-gray-400'}`}>
+                    {opt.disabled ? opt.off : opt.rule}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -450,7 +489,13 @@ export default function UploadForm({
           <>
             <div className="text-3xl mb-2">{inAlbum ? '💝' : '📸'}</div>
             <p className="text-sm font-medium text-[#7a5c2e]">
-              {items.length >= limits.maxFiles ? '已達單次上限' : items.length ? '點擊加入更多' : '點擊或拖曳上傳'}
+              {items.length >= limits.maxFiles
+                ? '已達單次上限'
+                : items.length
+                ? '點擊加入更多'
+                : album
+                ? inAlbum ? '選擇要私下給新人的照片或影片' : '選擇要上大螢幕的照片'
+                : '點擊或拖曳上傳'}
             </p>
             <p className="text-xs text-gray-400 mt-1">
               {inAlbum
@@ -609,7 +654,9 @@ export default function UploadForm({
                 : cooldown > 0
                 ? `請稍候 ${cooldown} 秒`
                 : inAlbum
-                ? `存入相簿 ${counts.total - counts.done} 個檔案`
+                ? `💝 私下存給新人（${counts.total - counts.done} 個）`
+                : album
+                ? `📺 上傳 ${counts.total - counts.done} 張到大螢幕`
                 : `上傳 ${counts.total - counts.done} 個檔案`}
             </button>
           )}

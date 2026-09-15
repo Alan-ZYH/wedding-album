@@ -61,6 +61,24 @@ export async function GET(req: NextRequest) {
     const media = adminDb.collection(COLLECTIONS.MEDIA)
     const album = adminDb.collection(COLLECTIONS.ALBUM)
 
+    // ?since=<ISO>: only what arrived after the newest entry the page holds.
+    // The album collection is closed to browsers, so 相簿 cannot listen to it
+    // the way 媒體管理 listens to media; it asks this every few seconds instead.
+    // A range on uploadTime reads only the new documents — about one read per
+    // collection when nothing has arrived.
+    const since = params.get('since')
+    if (since) {
+      const [m, a] = await Promise.all([
+        media.where('uploadTime', '>', since).orderBy('uploadTime', 'desc').limit(100).get(),
+        album.where('uploadTime', '>', since).orderBy('uploadTime', 'desc').limit(100).get(),
+      ])
+      const fresh = [
+        ...m.docs.map((d) => d.data() as Media).filter((x) => x.status !== 'deleted').map(fromMedia),
+        ...a.docs.map((d) => d.data() as AlbumItem).filter((x) => x.status === 'active').map(fromAlbum),
+      ].sort((x, y) => y.uploadTime.localeCompare(x.uploadTime))
+      return NextResponse.json({ success: true, data: fresh, next: null })
+    }
+
     if (guestIds.length) {
       const entries: AlbumEntry[] = []
       for (let i = 0; i < guestIds.length; i += 30) {
