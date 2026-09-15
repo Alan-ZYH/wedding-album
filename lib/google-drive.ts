@@ -77,7 +77,14 @@ export async function createResumableUploadSession(
   fileName: string,
   mimeType: string,
   fileSize: number,
-  isVideo: boolean
+  isVideo: boolean,
+  /**
+   * The site's origin, so Drive answers the browser's final PUT with CORS
+   * headers. Without it Drive adds them to the intermediate 308s but not to the
+   * final 200 — the upload lands, and the browser reports a network error
+   * because it may not read the response. (Checked against Drive both ways.)
+   */
+  origin?: string
 ): Promise<string> {
   const auth = getAuth()
   const token = await auth.getAccessToken()
@@ -95,6 +102,7 @@ export async function createResumableUploadSession(
         'Content-Type': 'application/json; charset=UTF-8',
         'X-Upload-Content-Type': mimeType,
         'X-Upload-Content-Length': String(fileSize),
+        ...(origin ? { Origin: origin } : {}),
       },
       body: JSON.stringify({ name: fileName, parents: [folderId] }),
     }

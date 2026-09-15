@@ -3,10 +3,13 @@
 /**
  * Browser → Google Drive upload over a resumable session, in chunks.
  *
- * Drive answers the site's origin with CORS headers on the upload itself
- * (checked against production), so the browser gets real progress events and
- * reads the finished file's id from the response. Two properties of Drive's
- * resumable protocol, both checked, shape the rest:
+ * Drive answers the site's origin with CORS headers on the upload itself, so
+ * the browser gets real progress events and reads the finished file's id —
+ * provided the session was created with the site's Origin (init does). Without
+ * it Drive sends the headers on the intermediate 308s but not on the final 200,
+ * so the upload lands and the browser still reports a network error. If that
+ * ever happens, FinalResponseUnreadable lets the server find the file by name.
+ * Two properties of Drive's resumable protocol, both checked, shape the rest:
  *
  *  - Resending bytes Drive already holds is accepted and does not move its
  *    progress back. So after a dropped connection the upload continues from the
@@ -25,6 +28,13 @@ export interface DriveSession {
 }
 
 export class UploadAborted extends Error {}
+
+/**
+ * The last chunk was sent but its response could not be read. Drive has most
+ * likely finished the file, so the caller should let the server look for it by
+ * name rather than report a failure.
+ */
+export class FinalResponseUnreadable extends Error {}
 
 function putChunk(
   url: string,
@@ -66,9 +76,18 @@ export async function uploadToDrive(
   while (true) {
     const start = session.sent
     const end = Math.min(start + CHUNK, total)
-    const res = await putChunk(session.uploadUrl, file, start, end, total, mime, (loaded) =>
-      onProgress(Math.min(1, (start + loaded) / total))
-    )
+    let sentAll = false
+    let res: { status: number; body: string }
+    try {
+      res = await putChunk(session.uploadUrl, file, start, end, total, mime, (loaded) => {
+        if (end === total && loaded >= end - start) sentAll = true
+        onProgress(Math.min(1, (start + loaded) / total))
+      })
+    } catch (err) {
+      // Every byte of the final chunk went out; only the answer is missing
+      if (sentAll) throw new FinalResponseUnreadable()
+      throw err
+    }
 
     if (res.status === 200 || res.status === 201) {
       session.sent = total

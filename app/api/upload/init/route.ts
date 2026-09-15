@@ -95,7 +95,11 @@ export async function POST(req: NextRequest) {
     const fileName = `${safeName}_${dateOnly}_${timeOnly}_${random}.${ext}`
 
     const isVideo = validation.fileType === 'video'
-    const uploadUrl = await createResumableUploadSession(fileName, mimeType, fileSize, isVideo)
+    // Forward the browser's origin only when it is this site — the session is
+    // what grants that origin CORS access to the upload response
+    const origin = req.headers.get('origin')
+    const sameSite = origin && (() => { try { return new URL(origin).host === req.headers.get('host') } catch { return false } })()
+    const uploadUrl = await createResumableUploadSession(fileName, mimeType, fileSize, isVideo, sameSite ? origin : undefined)
     const mediaId = uuidv4()
 
     return NextResponse.json({

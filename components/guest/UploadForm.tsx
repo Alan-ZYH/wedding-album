@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { uploadToDrive, mimeOf, videoThumbnail, UploadAborted, type DriveSession } from '@/lib/drive-upload'
+import { uploadToDrive, mimeOf, videoThumbnail, UploadAborted, FinalResponseUnreadable, type DriveSession } from '@/lib/drive-upload'
 
 const MAX_IMAGE_MB = 30
 const MAX_VIDEO_MB = 500
@@ -198,7 +198,13 @@ export default function UploadForm({
       }
 
       if (session.driveId === undefined) {
-        session.driveId = await uploadToDrive(session, it.file, it.mime, (p) => patch(it.key, { progress: p }))
+        try {
+          session.driveId = await uploadToDrive(session, it.file, it.mime, (p) => patch(it.key, { progress: p }))
+        } catch (err) {
+          if (!(err instanceof FinalResponseUnreadable)) throw err
+          // Sent in full; let the server find it by name
+          session.driveId = ''
+        }
         patch(it.key, { session: { ...session } })
       }
 
