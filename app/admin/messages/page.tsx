@@ -47,6 +47,17 @@ export default function MessagesPage() {
   const pageable = stateFilter === 'all' || stateFilter === 'masked'
   const moreToLoad = pageable && feed.hasMore[stateFilter as 'all' | 'masked']
 
+  // Deleted blessings still occupy their place in the ordered pages — the
+  // query cannot exclude them without a composite index — so a page can come
+  // back mostly empty, and more so the more the couple has deleted. Keep
+  // loading until the tab shows a screenful or there is nothing older.
+  const { loadMore, loadingMore } = feed
+  useEffect(() => {
+    if (moreToLoad && !loadingMore && tabList.length < 30) {
+      loadMore(stateFilter as 'all' | 'masked')
+    }
+  }, [moreToLoad, loadingMore, tabList.length, stateFilter, loadMore])
+
   const filtered = tabList.filter((m) => {
     if (!filter) return true
     const s = filter.toLowerCase()
