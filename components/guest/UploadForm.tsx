@@ -274,10 +274,16 @@ export default function UploadForm({
 
     let stopped = false
     const queue = [...todo]
+    // Outcomes are tallied here, not read back from state: when the last file
+    // finishes, React has not re-rendered yet, so the items in state still show
+    // it uploading — which once left a finished batch on screen with no
+    // confirmation and no cooldown.
+    const outcomes = new Map<string, 'done' | 'failed' | 'stop'>()
     const worker = async () => {
       while (!stopped && queue.length) {
         const it = queue.shift()!
         const outcome = await uploadOne({ ...itemsRef.current.find((x) => x.key === it.key)!, fatal: false }, isAlbum)
+        outcomes.set(it.key, outcome)
         if (outcome === 'stop') stopped = true
       }
     }
@@ -286,18 +292,28 @@ export default function UploadForm({
     releaseAwake()
     setUploading(false)
 
-    const after = itemsRef.current
-    const done = after.filter((it) => it.status === 'done').length
-    const pending = after.filter((it) => it.status !== 'done')
-    if (done > 0 && (limits.cooldownSeconds ?? 0) > 0 && !stopped) setCooldownFor(isAlbum, limits.cooldownSeconds)
+    const doneNow = [...outcomes.values()].filter((o) => o === 'done').length
+    // Files outside this run kept whatever status they had
+    const allDone = itemsRef.current.every((it) =>
+      outcomes.has(it.key) ? outcomes.get(it.key) === 'done' : it.status === 'done'
+    )
+    const doneTotal = itemsRef.current.filter((it) =>
+      outcomes.has(it.key) ? outcomes.get(it.key) === 'done' : it.status === 'done'
+    ).length
 
-    if (pending.length === 0) {
-      after.forEach((it) => { if (it.thumb?.startsWith('blob:')) URL.revokeObjectURL(it.thumb) })
+    if (doneNow > 0 && limits.cooldownSeconds > 0 && !stopped) setCooldownFor(isAlbum, limits.cooldownSeconds)
+
+    if (allDone) {
+      itemsRef.current.forEach((it) => { if (it.thumb?.startsWith('blob:')) URL.revokeObjectURL(it.thumb) })
       setItems([])
-      setFinished({ count: done, album: isAlbum })
+      setFinished({ count: doneTotal, album: isAlbum })
     } else if (stopped) {
-      const reason = pending.find((it) => it.fatal)?.error
-      if (reason) setNotice([reason])
+      // The item that stopped the batch carries the reason; read it after the
+      // render that recorded it
+      setTimeout(() => {
+        const reason = itemsRef.current.find((it) => it.fatal)?.error
+        if (reason) setNotice([reason])
+      }, 0)
     }
   }
 
