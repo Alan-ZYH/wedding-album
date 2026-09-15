@@ -1,27 +1,27 @@
 import { cookies } from 'next/headers'
 import { NextRequest } from 'next/server'
-
-// Renamed from 'admin_session': the middleware used to hand that cookie to
-// anyone who merely opened /admin, and those are valid for 30 days. A new name
-// retires them all at once.
-const ADMIN_COOKIE = 'admin_key_v2'
+import { ADMIN_COOKIE, getAdminSecrets, safeEqual, sessionTokenFor } from './admin-secrets'
 
 /**
- * Admin authentication uses the URL-secrecy model — there is no password.
+ * Admin authentication uses the URL-secrecy model — there is no password to
+ * type. Visiting /api/admin/unlock?key=… with the right key sets a cookie
+ * holding a signature of that key; every admin-only API route recomputes the
+ * signature and compares. This is the check that actually protects the data —
+ * middleware only screens the pages.
  *
- * Visiting /api/admin/unlock?key=… with the right key grants an
- * `admin_key_v2` cookie; the middleware then lets that device into /admin.
- * Admin-only API routes call this to check for the same cookie, so guests who
- * only ever received the /guest link cannot perform admin actions (delete
- * others' media, change settings, …) even by calling the API directly.
+ * Local development (`npm run dev`) is open, as before.
  */
 export async function isAdminAuthenticated(req?: NextRequest): Promise<boolean> {
+  if (process.env.NODE_ENV !== 'production') return true
   try {
-    if (req) {
-      return req.cookies.get(ADMIN_COOKIE)?.value === '1'
-    }
-    const cookieStore = await cookies()
-    return cookieStore.get(ADMIN_COOKIE)?.value === '1'
+    const presented = req
+      ? req.cookies.get(ADMIN_COOKIE)?.value
+      : (await cookies()).get(ADMIN_COOKIE)?.value
+    if (!presented) return false
+
+    const { adminAccessKey } = await getAdminSecrets()
+    if (!adminAccessKey) return false // no key configured: nobody is admin
+    return safeEqual(presented, sessionTokenFor(adminAccessKey))
   } catch {
     return false
   }

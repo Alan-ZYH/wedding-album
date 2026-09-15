@@ -1,38 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Renamed from 'admin_session': the middleware used to hand that cookie to
-// anyone who merely opened /admin, and those are valid for 30 days. A new name
-// retires them all at once.
-const ADMIN_COOKIE = 'admin_key_v2'
-
-const adminCookieOptions = {
-  httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
-  maxAge: 60 * 60 * 24 * 30, // 30 days
-  path: '/',
-}
+// Must match ADMIN_COOKIE in lib/admin-secrets.ts. Middleware runs on the edge
+// and cannot import that module (it uses node:crypto and the Admin SDK).
+const ADMIN_COOKIE = 'admin_session_v3'
+const TOKEN_SHAPE = /^[a-f0-9]{64}$/
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // ── Admin pages ────────────────────────────────────────────────
-  // There is still no password to type — access is by knowing a URL. The key
-  // itself is NOT checked here: middleware runs on the edge and cannot reach
-  // Firestore, so /api/admin/unlock does the comparison and sets this cookie.
-  // Here we only ask whether the device has already been let in.
+  // Screens the pages only. The edge cannot read Firestore, so it cannot hold
+  // the key to verify the signature; it checks the cookie has the right shape.
+  // Someone forging that shape reaches an empty page shell — every admin API
+  // route verifies the signature itself (lib/auth.ts) and refuses them.
   //
-  // A wrong or missing key gets 404 rather than 403: the repo is public, so
-  // "this path exists but you can't have it" would confirm the panel is here.
+  // A refusal is a 404 rather than a 403: the repo is public, and "this exists
+  // but you can't have it" would confirm the panel is here.
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
-    if (req.cookies.get(ADMIN_COOKIE)?.value === '1') return NextResponse.next()
-
-    // Local development stays open — `npm run dev` should not need the key
-    if (process.env.NODE_ENV !== 'production') {
-      const res = NextResponse.next()
-      res.cookies.set(ADMIN_COOKIE, '1', adminCookieOptions)
-      return res
-    }
+    if (process.env.NODE_ENV !== 'production') return NextResponse.next()
+    if (TOKEN_SHAPE.test(req.cookies.get(ADMIN_COOKIE)?.value ?? '')) return NextResponse.next()
 
     // no-store so a phone that was refused before unlocking can't be shown a
     // remembered 404 afterwards

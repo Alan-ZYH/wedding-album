@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
+import { ADMIN_COOKIE, getAdminSecrets, safeEqual, sessionTokenFor } from '@/lib/admin-secrets'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,15 +39,17 @@ export async function GET(req: NextRequest) {
 
   let expected: string | undefined
   try {
-    const snap = await adminDb.collection(COLLECTIONS.SETTINGS).doc('config').get()
-    expected = snap.data()?.adminAccessKey
+    // Read fresh: a key rotated seconds ago must work here at once
+    expected = (await getAdminSecrets(true)).adminAccessKey
   } catch (err) {
     console.error('GET /api/admin/unlock error:', err)
     return new NextResponse(null, { status: 500, headers: NO_STORE })
   }
 
-  // No key configured → open, which keeps local development usable
-  if (expected && key !== expected) {
+  // In production a missing key means nobody gets in. The old default was
+  // "open", which would have unlocked anyone had the key ever gone missing.
+  const devOpen = process.env.NODE_ENV !== 'production' && !expected
+  if (!devOpen && (!expected || !safeEqual(key, expected))) {
     // The same 404 the middleware gives, so probing tells an attacker nothing
     return new NextResponse(null, { status: 404, headers: NO_STORE })
   }
@@ -57,7 +59,7 @@ export async function GET(req: NextRequest) {
     <p>這台裝置 30 天內都能直接開啟管理端，不用再帶密鑰。</p>
     <a href="/admin/dashboard">進入管理端</a>
   `)
-  res.cookies.set('admin_key_v2', '1', {
+  res.cookies.set(ADMIN_COOKIE, sessionTokenFor(expected ?? 'dev'), {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',

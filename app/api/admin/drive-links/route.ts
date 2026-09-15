@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { ensureFolders } from '@/lib/google-drive'
-import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
+import { getAdminSecrets } from '@/lib/admin-secrets'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,10 +19,9 @@ export async function GET(req: NextRequest) {
   }
   try {
     const folders = await ensureFolders()
-    // Falls back to Firestore so the id can be set without a Vercel redeploy,
-    // the same way the admin key is kept
-    const settings = await adminDb.collection(COLLECTIONS.SETTINGS).doc('config').get()
-    const backupId = process.env.BACKUP_FOLDER_ID || settings.data()?.backupFolderId
+    // Falls back to private/admin so the id can be set without a Vercel
+    // redeploy — and never settings/config, which any browser can read
+    const backupId = process.env.BACKUP_FOLDER_ID || (await getAdminSecrets()).backupFolderId
     return NextResponse.json({
       success: true,
       data: {
