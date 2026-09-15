@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { collection, onSnapshot, query, limit } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { useMessageFeed } from '@/lib/use-message-feed'
 import { Message, MessageDisplayState, DEFAULT_SETTINGS } from '@/types'
 import { useRealNames, withRealName, ADMIN_GUEST_ID } from '@/lib/guest-names'
 import BlessingColorPicker from '@/components/admin/BlessingColorPicker'
@@ -22,8 +21,7 @@ const STATE_LABEL: Record<MessageDisplayState, { text: string; className: string
 const stateOf = (m: Message): MessageDisplayState => m.displayState ?? 'masked'
 
 export default function MessagesPage() {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [loading, setLoading] = useState(true)
+  const feed = useMessageFeed()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
   const [newMsg, setNewMsg] = useState<{ guestName: string; message: string; pinned: boolean; color: string | null }>(
@@ -35,26 +33,7 @@ export default function MessagesPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [size, setSize] = useState(DEFAULT_SETTINGS.messageCarouselSize)
 
-  const realNames = useRealNames(messages.map((m) => m.guestId))
-
-  // Live, like 媒體管理: a blessing posted from the floor should appear here
-  // without the couple thinking to reload. Sorting is done in memory because
-  // status + createdAt would need a composite index.
-  useEffect(() => {
-    if (!db) return
-    const unsub = onSnapshot(
-      query(collection(db, 'messages'), limit(1000)),
-      (snap) => {
-        setMessages(
-          snap.docs.map((d) => d.data() as Message)
-            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        )
-        setLoading(false)
-      },
-      () => setLoading(false)
-    )
-    return () => unsub()
-  }, [])
+  const realNames = useRealNames(feed.lists.all.map((m) => m.guestId))
 
   useEffect(() => {
     fetch('/api/settings')
@@ -63,17 +42,12 @@ export default function MessagesPage() {
       .catch(() => {})
   }, [])
 
-  const visible = messages.filter((m) => m.status !== 'deleted')
-  const counts = {
-    all: visible.length,
-    pending: visible.filter((m) => stateOf(m) === 'pending').length,
-    pinned: visible.filter((m) => stateOf(m) === 'pinned').length,
-    playing: visible.filter((m) => stateOf(m) === 'playing').length,
-    masked: visible.filter((m) => stateOf(m) === 'masked').length,
-  }
+  const counts = feed.counts
+  const tabList = feed.lists[stateFilter]
+  const pageable = stateFilter === 'all' || stateFilter === 'masked'
+  const moreToLoad = pageable && feed.hasMore[stateFilter as 'all' | 'masked']
 
-  const filtered = visible.filter((m) => {
-    if (stateFilter !== 'all' && stateOf(m) !== stateFilter) return false
+  const filtered = tabList.filter((m) => {
     if (!filter) return true
     const s = filter.toLowerCase()
     return (
@@ -95,6 +69,7 @@ export default function MessagesPage() {
       })
       const data = await res.json()
       if (!data.success) alert(data.error || '操作失敗')
+      else feed.refreshCounts()
       return data.success as boolean
     } catch {
       alert('網路錯誤，請重試')
@@ -105,7 +80,10 @@ export default function MessagesPage() {
   }
 
   const saveEdit = async (id: string) => {
-    if (await send(id, { message: editText })) setEditingId(null)
+    if (await send(id, { message: editText })) {
+      feed.patchLocal(id, { message: editText })
+      setEditingId(null)
+    }
   }
 
   const remove = async (id: string) => {
@@ -143,7 +121,7 @@ export default function MessagesPage() {
     }
   }
 
-  if (loading) return <div className="text-center py-16 text-gray-400">載入中...</div>
+  if (!feed.ready) return <div className="text-center py-16 text-gray-400">載入中...</div>
 
   return (
     <div>
@@ -241,7 +219,7 @@ export default function MessagesPage() {
 
       <input
         type="text"
-        placeholder="搜尋名稱或內容..."
+        placeholder={moreToLoad ? '搜尋已載入的祝福（更早的請先往下載入）…' : '搜尋名稱或內容...'}
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#c9a84c] bg-white mb-4"
@@ -356,6 +334,23 @@ export default function MessagesPage() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {pageable && (
+        <div className="text-center mt-4 mb-2">
+          <p className="text-xs text-gray-400 mb-2">
+            已顯示 {tabList.length} / 共 {counts[stateFilter]} 則
+          </p>
+          {moreToLoad && (
+            <button
+              onClick={() => feed.loadMore(stateFilter as 'all' | 'masked')}
+              disabled={feed.loadingMore}
+              className="text-sm px-5 py-2 rounded-xl border border-[#e8d5a3] bg-white text-[#7a5c2e] hover:bg-[#fdf8f0] disabled:opacity-50"
+            >
+              {feed.loadingMore ? '載入中…' : '載入更早的祝福'}
+            </button>
+          )}
         </div>
       )}
     </div>
