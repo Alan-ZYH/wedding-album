@@ -1,3 +1,4 @@
+import { FieldValue } from 'firebase-admin/firestore'
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
@@ -47,6 +48,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         status,
         displayState: 'masked',
         displayStateAt: new Date().toISOString(),
+        maskedBy: 'guest',
       })
       return NextResponse.json({ success: true })
     }
@@ -64,6 +66,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       updates.displayState = nextState
       updates.displayStateAt = now
       if (nextState === 'pinned') updates.pinnedOrder = Date.now()
+      // The couple's own 遮蔽 is a decision a guest must not undo; any other
+      // state clears the record
+      updates.maskedBy = nextState === 'masked' ? 'admin' : FieldValue.delete()
 
       // ▶️ means "cut the queue": the photo joins the carousel and every
       // screen jumps to it. If the pool is already full, the photo that has
@@ -87,7 +92,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
             .slice(0, others.length - slots + 1)
           const batch = adminDb.batch()
           oldest.forEach((d) =>
-            batch.update(d.ref, { displayState: 'masked', displayStateAt: now })
+            batch.update(d.ref, { displayState: 'masked', displayStateAt: now, maskedBy: 'rotation' })
           )
           await batch.commit()
         }

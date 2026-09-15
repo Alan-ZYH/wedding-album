@@ -20,6 +20,8 @@ export default function MyUploads({ guestId }: Props) {
   const [msgBusy, setMsgBusy] = useState<string | null>(null)
   const [albumItems, setAlbumItems] = useState<AlbumItem[]>([])
   const [albumPreview, setAlbumPreview] = useState<AlbumItem | null>(null)
+  const [projecting, setProjecting] = useState<string | null>(null)
+  const [toast, setToast] = useState('')
 
   // Real-time listener — updates immediately after upload or hide
   useEffect(() => {
@@ -71,6 +73,36 @@ export default function MyUploads({ guestId }: Props) {
       else alert('移除失敗，請稍後再試')
     } catch {}
     finally { setDeleting(null) }
+  }
+
+  /**
+   * 投影: send one of their own photos to the screen queue — one that already
+   * played, or one they had kept for the couple. The server treats it as
+   * sending a photo: it spends the cooldown and honours the switches.
+   */
+  const project = async (id: string, fromAlbum: boolean) => {
+    setProjecting(id)
+    try {
+      const res = await fetch('/api/guest/project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guestId, id }),
+      })
+      const d = await res.json()
+      if (d.success) {
+        // A kept photo now lives with the projection photos, which the live
+        // listener brings in; drop it from the album list at once
+        if (fromAlbum) setAlbumItems((prev) => prev.filter((a) => a.id !== id))
+        setToast('已排入大螢幕，稍後就會播放 📺')
+      } else {
+        setToast(d.error || '投影失敗，請稍後再試')
+      }
+    } catch {
+      setToast('網路錯誤，請稍後再試')
+    } finally {
+      setProjecting(null)
+      setTimeout(() => setToast(''), 3500)
+    }
   }
 
   // The guest's own blessings, managed alongside their photos so there is one
@@ -198,23 +230,41 @@ export default function MyUploads({ guestId }: Props) {
               </div>
             )}
 
-            {/* Approval badge */}
-            {!item.approved && (
-              <div className="absolute top-1 left-1 bg-yellow-500/90 text-white text-xs px-1.5 py-0.5 rounded">
-                審核中
+            {/* Where it is on the screen */}
+            {!item.approved ? (
+              <div className="absolute top-1 left-1 bg-yellow-500/90 text-white text-[10px] px-1.5 py-0.5 rounded">審核中</div>
+            ) : (
+              <div className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded pointer-events-none">
+                {item.displayState === 'playing' ? '▶️ 播放中'
+                  : item.displayState === 'pinned' ? '📌 置頂'
+                  : item.displayState === 'pending' ? '⏳ 排隊中'
+                  : item.maskedBy === 'rotation' ? '已播過'
+                  : '暫停投影'}
               </div>
             )}
 
-            {/* Delete — always visible: hover-reveal is invisible on phones,
+            {/* Actions — always visible: hover-reveal is invisible on phones,
                 which is the only device most guests will ever use this on. */}
-            <button
-              onClick={() => handleDelete(item.id)}
-              disabled={deleting === item.id}
-              aria-label="移除這個檔案"
-              className="absolute bottom-1.5 right-1.5 bg-black/70 hover:bg-red-600 active:bg-red-600 text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
-            >
-              {deleting === item.id ? '移除中' : <><span>🗑</span><span>移除</span></>}
-            </button>
+            <div className="absolute bottom-1.5 inset-x-1.5 flex justify-end gap-1">
+              {item.fileType === 'photo' && item.displayState === 'masked' && item.maskedBy === 'rotation' && (
+                <button
+                  onClick={() => project(item.id, false)}
+                  disabled={projecting === item.id}
+                  aria-label="再次投影到大螢幕"
+                  className="bg-[#c9a84c] hover:bg-[#b8953d] text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
+                >
+                  {projecting === item.id ? '…' : <><span>📺</span><span>投影</span></>}
+                </button>
+              )}
+              <button
+                onClick={() => handleDelete(item.id)}
+                disabled={deleting === item.id}
+                aria-label="移除這個檔案"
+                className="bg-black/70 hover:bg-red-600 active:bg-red-600 text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
+              >
+                {deleting === item.id ? '移除中' : <><span>🗑</span><span>移除</span></>}
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -239,14 +289,26 @@ export default function MyUploads({ guestId }: Props) {
                 {item.fileType === 'video' && (
                   <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded pointer-events-none">▶ 影片</span>
                 )}
-                <button
-                  onClick={() => removeAlbumItem(item.id)}
-                  disabled={deleting === item.id}
-                  aria-label="從相簿移除"
-                  className="absolute bottom-1.5 right-1.5 bg-black/70 hover:bg-red-600 active:bg-red-600 text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
-                >
-                  {deleting === item.id ? '移除中' : <><span>🗑</span><span>移除</span></>}
-                </button>
+                <div className="absolute bottom-1.5 inset-x-1.5 flex justify-end gap-1">
+                  {item.fileType === 'photo' && (
+                    <button
+                      onClick={() => project(item.id, true)}
+                      disabled={projecting === item.id}
+                      aria-label="改為投影到大螢幕"
+                      className="bg-[#c9a84c] hover:bg-[#b8953d] text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
+                    >
+                      {projecting === item.id ? '…' : <><span>📺</span><span>投影</span></>}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => removeAlbumItem(item.id)}
+                    disabled={deleting === item.id}
+                    aria-label="從相簿移除"
+                    className="bg-black/70 hover:bg-red-600 active:bg-red-600 text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
+                  >
+                    {deleting === item.id ? '移除中' : <><span>🗑</span><span>移除</span></>}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -272,6 +334,12 @@ export default function MyUploads({ guestId }: Props) {
               />
             )}
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 inset-x-4 z-40 flex justify-center pointer-events-none">
+          <div className="bg-gray-900/90 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg">{toast}</div>
         </div>
       )}
 

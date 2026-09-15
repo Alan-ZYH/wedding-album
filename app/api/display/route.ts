@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
         // Rule Y: the photo that just played steps aside — but only one that
         // is really in 播放, never a pinned photo or one already gone.
         if (played?.exists && played.data()?.displayState === 'playing') {
-          tx.update(played.ref, { displayState: 'masked', displayStateAt: now })
+          tx.update(played.ref, { displayState: 'masked', displayStateAt: now, maskedBy: 'rotation' })
           occupied -= 1
         }
 

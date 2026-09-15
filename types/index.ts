@@ -35,6 +35,12 @@ export interface Media {
    * order it arrived.
    */
   sortOrder?: number
+  /**
+   * Why a masked photo is masked. Only 'rotation' — pushed out after playing —
+   * may be sent back to the screen by the guest who took it; a photo the couple
+   * masked stays masked. Absent on older photos, and read as not requeueable.
+   */
+  maskedBy?: 'rotation' | 'admin' | 'guest'
 }
 
 /** A photo or video a guest kept for the couple — stored in `album`, never projected. */

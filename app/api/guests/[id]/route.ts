@@ -58,7 +58,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
       for (const doc of mediaSnap.docs) {
         if (doc.data().displayState === 'masked') continue
-        batch.update(doc.ref, { displayState: 'masked', displayStateAt: now })
+        batch.update(doc.ref, { displayState: 'masked', displayStateAt: now, maskedBy: 'admin' })
         maskedPhotos++
         if (++pending >= 400) await flush()
       }
@@ -118,7 +118,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     let deletedMessages = 0
     for (const doc of mediaSnap.docs) {
       if (doc.data().status === 'deleted') continue
-      batch.update(doc.ref, { status: 'deleted', displayState: 'masked', displayStateAt: now })
+      batch.update(doc.ref, { status: 'deleted', displayState: 'masked', displayStateAt: now, maskedBy: 'admin' })
       deletedPhotos++
       if (++pending >= 400) await flush()
     }

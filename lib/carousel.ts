@@ -41,7 +41,7 @@ export async function enforceCarouselCapacity(size: number): Promise<number> {
 
   // carouselSize maxes out at 100, so this stays well under the 500-write cap
   const batch = adminDb.batch()
-  doomed.forEach((d) => batch.update(d.ref, { displayState: 'masked', displayStateAt: now }))
+  doomed.forEach((d) => batch.update(d.ref, { displayState: 'masked', displayStateAt: now, maskedBy: 'rotation' }))
   await batch.commit()
   return doomed.length
 }
