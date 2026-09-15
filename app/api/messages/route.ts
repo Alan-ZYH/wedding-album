@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
-import { checkGuestGate, gateErrorMessage, recordGuestAction } from '@/lib/guests'
+import { checkGuestGate, gateErrorMessage, gatedGuestAction, type GuestGate } from '@/lib/guests'
 import { admitMessage, queueFields, PinLimitError } from '@/lib/message-pool'
 import { isBlessingColor } from '@/lib/blessing-colors'
 import { sanitizeText, sanitizeName, messageTooLong } from '@/lib/sanitize'
@@ -75,20 +75,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: CLOSED_MESSAGE, reason: 'closed' }, { status: 403 })
     }
 
-    // Block list + 30s cooldown, tracked separately from photo uploads
+    // Block list + 30s cooldown, tracked separately from photo uploads. This
+    // early check turns away a blocked or waiting guest before any work; the
+    // binding one runs again with the write below.
+    const refuse = (gate: Exclude<GuestGate, { ok: true }>) =>
+      NextResponse.json(
+        {
+          success: false,
+          error: gateErrorMessage(gate, 'message'),
+          reason: gate.reason,
+          remaining: gate.reason === 'cooldown' ? gate.remaining : undefined,
+        },
+        { status: gate.reason === 'blocked' ? 403 : 429 }
+      )
     if (!isAdmin && guestId) {
       const gate = await checkGuestGate(guestId, 'message')
-      if (!gate.ok) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: gateErrorMessage(gate, 'message'),
-            reason: gate.reason,
-            remaining: gate.reason === 'cooldown' ? gate.remaining : undefined,
-          },
-          { status: gate.reason === 'blocked' ? 403 : 429 }
-        )
-      }
+      if (!gate.ok) return refuse(gate)
     }
 
     const message = sanitizeText(messageRaw)
@@ -130,17 +132,19 @@ export async function POST(req: NextRequest) {
     const pin = isAdmin && body.pinned === true
     try {
       if (pin) await admitMessage({ ref, as: 'pinned', create: doc })
-      else await ref.set({ ...doc, ...queueFields() })
+      else if (!isAdmin && guestId) {
+        // The cooldown is checked, advanced and the blessing written together,
+        // so simultaneous sends from one guest cannot all pass the check
+        const gate = await gatedGuestAction(guestId, guestName, 'message', (tx) =>
+          tx.set(ref, { ...doc, ...queueFields() })
+        )
+        if (!gate.ok) return refuse(gate)
+      } else await ref.set({ ...doc, ...queueFields() })
     } catch (err) {
       if (err instanceof PinLimitError) {
         return NextResponse.json({ success: false, error: err.message }, { status: 409 })
       }
       throw err
-    }
-
-    // Only successful posts advance the cooldown window
-    if (!isAdmin && guestId) {
-      await recordGuestAction(guestId, guestName, 'message')
     }
 
     return NextResponse.json({ success: true, data: doc })

@@ -1,4 +1,4 @@
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, type Transaction } from 'firebase-admin/firestore'
 import { adminDb, COLLECTIONS } from './firebase-admin'
 import { Guest } from '@/types'
 import type { PhotoLimits } from './upload-limits'
@@ -39,13 +39,8 @@ export async function getGuest(guestId: string): Promise<Guest | null> {
   return snap.exists ? (snap.data() as Guest) : null
 }
 
-/** Check whether a guest may perform an action right now. Does not mutate. */
-export async function checkGuestGate(
-  guestId: string,
-  action: GuestAction,
-  limits?: PhotoLimits
-): Promise<GuestGate> {
-  const guest = await getGuest(guestId)
+/** The gate's verdict for a guest record as it stands. */
+function evaluateGate(guest: Guest | null, action: GuestAction, limits?: PhotoLimits): GuestGate {
   if (!guest) return { ok: true } // first time — nothing to block or throttle
 
   // Blocking holds whatever the limits say; turning limits off only lifts the
@@ -66,6 +61,65 @@ export async function checkGuestGate(
   return { ok: false, reason: 'cooldown', remaining: Math.ceil(windowSec - elapsed) }
 }
 
+/** Check whether a guest may perform an action right now. Does not mutate. */
+export async function checkGuestGate(
+  guestId: string,
+  action: GuestAction,
+  limits?: PhotoLimits
+): Promise<GuestGate> {
+  return evaluateGate(await getGuest(guestId), action, limits)
+}
+
+/** The cooldown and tally fields that recording one more action writes. */
+function actionPatch(existing: Guest | null, guestId: string, guestName: string, action: GuestAction, limits?: PhotoLimits) {
+  const now = new Date().toISOString()
+  const { windowSec } = action !== 'message' && limits ? limits : COOLDOWN[action]
+  const t = TRACK[action]
+  const startedAt = existing?.[t.at]
+  const used = existing?.[t.used] ?? 0
+  const windowExpired =
+    !startedAt || (Date.now() - new Date(startedAt).getTime()) / 1000 >= windowSec
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patch: Record<string, any> = {
+    guestId,
+    guestName,
+    lastActiveAt: now,
+    blocked: existing?.blocked ?? false,
+    firstSeenAt: existing?.firstSeenAt ?? now,
+    [t.count]: FieldValue.increment(1),
+  }
+  if (windowExpired) { patch[t.at] = now; patch[t.used] = 1 }
+  else { patch[t.used] = used + 1 }
+  return patch
+}
+
+/**
+ * Check the gate, record the action and perform its write, all in one
+ * transaction. A separate check and record let five taps of 送出 arriving
+ * together each read "nothing sent yet" and each get through — measured: a
+ * guest sending five blessings at once had all five accepted. In a
+ * transaction the second one reads the first one's record and is refused.
+ */
+export async function gatedGuestAction(
+  guestId: string,
+  guestName: string,
+  action: GuestAction,
+  write: (tx: Transaction) => void,
+  limits?: PhotoLimits
+): Promise<GuestGate> {
+  const ref = adminDb.collection(COLLECTIONS.GUESTS).doc(guestId)
+  return adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    const existing = snap.exists ? (snap.data() as Guest) : null
+    const gate = evaluateGate(existing, action, limits)
+    if (!gate.ok) return gate
+    tx.set(ref, actionPatch(existing, guestId, guestName, action, limits), { merge: true })
+    write(tx)
+    return gate
+  })
+}
+
 /**
  * Record a successful action: upserts the guest, bumps counters and advances
  * the cooldown window. Call this only after the action actually succeeded.
@@ -77,10 +131,6 @@ export async function recordGuestAction(
   limits?: PhotoLimits
 ): Promise<void> {
   const ref = adminDb.collection(COLLECTIONS.GUESTS).doc(guestId)
-  const now = new Date().toISOString()
-  const { windowSec } = action !== 'message' && limits ? limits : COOLDOWN[action]
-  const t = TRACK[action]
-
   // In a transaction: files in a batch upload side by side and complete within
   // milliseconds of each other. Read-then-write without one let three
   // completions each read "0 used" and each write "1", so a 3-photo batch was
@@ -88,24 +138,7 @@ export async function recordGuestAction(
   await adminDb.runTransaction(async (tx) => {
     const snap = await tx.get(ref)
     const existing = snap.exists ? (snap.data() as Guest) : null
-    const startedAt = existing?.[t.at]
-    const used = existing?.[t.used] ?? 0
-    const windowExpired =
-      !startedAt || (Date.now() - new Date(startedAt).getTime()) / 1000 >= windowSec
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const patch: Record<string, any> = {
-      guestId,
-      guestName,
-      lastActiveAt: now,
-      blocked: existing?.blocked ?? false,
-      firstSeenAt: existing?.firstSeenAt ?? now,
-      [t.count]: FieldValue.increment(1),
-    }
-    if (windowExpired) { patch[t.at] = now; patch[t.used] = 1 }
-    else { patch[t.used] = used + 1 }
-
-    tx.set(ref, patch, { merge: true })
+    tx.set(ref, actionPatch(existing, guestId, guestName, action, limits), { merge: true })
   })
 }
 
