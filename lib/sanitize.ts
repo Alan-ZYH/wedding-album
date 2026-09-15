@@ -15,7 +15,19 @@ function stripHtml(input: string): string {
 
 export function sanitizeText(input: string): string {
   if (!input) return ''
-  return stripHtml(input).slice(0, 500)
+  // A backstop against oversized payloads only; the real limit is
+  // MESSAGE_MAX_CHARS, refused with a message rather than silently cut
+  return stripHtml(input).slice(0, 2000)
+}
+
+/**
+ * Blessings are read as they fly across the screen, so they are kept short.
+ * Counted in code points, like names, so an emoji costs one character.
+ */
+export const MESSAGE_MAX_CHARS = 100
+
+export function messageTooLong(text: string): string | null {
+  return [...text].length > MESSAGE_MAX_CHARS ? `祝福不可超過 ${MESSAGE_MAX_CHARS} 字` : null
 }
 
 export function sanitizeName(input: string): string {

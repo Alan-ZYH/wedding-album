@@ -130,13 +130,17 @@ export default function MyUploads({ guestId }: Props) {
     if (!trimmed) return
     setMsgBusy(id)
     try {
-      await fetch(`/api/messages/${id}`, {
+      const res = await fetch(`/api/messages/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ guestId, message: trimmed }),
       })
-      setEditingId(null)
-    } catch {}
+      const d = await res.json()
+      // It used to close the editor whatever the answer, so a refused edit
+      // looked saved while the old text stayed
+      if (d.success) setEditingId(null)
+      else alert(d.error || '儲存失敗，請稍後再試')
+    } catch { alert('網路錯誤，請稍後再試') }
     finally { setMsgBusy(null) }
   }
 
@@ -355,7 +359,6 @@ export default function MyUploads({ guestId }: Props) {
                     <textarea
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
-                      maxLength={500}
                       rows={3}
                       className="w-full resize-none text-sm border border-[#e8d5a3] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#c9a84c]"
                     />

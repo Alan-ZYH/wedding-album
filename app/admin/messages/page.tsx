@@ -174,7 +174,7 @@ export default function MessagesPage() {
             value={newMsg.message}
             onChange={(e) => setNewMsg((p) => ({ ...p, message: e.target.value }))}
             rows={3}
-            maxLength={500}
+            maxLength={100}
             className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#c9a84c] resize-none"
           />
           <label className="flex items-center gap-2 mt-2 text-sm text-gray-600 cursor-pointer w-fit">
@@ -284,7 +284,7 @@ export default function MessagesPage() {
                     <textarea
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
-                      maxLength={500}
+                      maxLength={100}
                       rows={3}
                       className="w-full border border-[#c9a84c] rounded-xl px-3 py-2 text-sm focus:outline-none resize-none"
                     />

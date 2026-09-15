@@ -5,7 +5,7 @@ import { isAdminAuthenticated } from '@/lib/auth'
 import { checkGuestGate, gateErrorMessage, recordGuestAction } from '@/lib/guests'
 import { admitMessage, queueFields, PinLimitError } from '@/lib/message-pool'
 import { isBlessingColor } from '@/lib/blessing-colors'
-import { sanitizeText, sanitizeName } from '@/lib/sanitize'
+import { sanitizeText, sanitizeName, messageTooLong } from '@/lib/sanitize'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { Message } from '@/types'
 import { getSettings } from '@/lib/settings'
@@ -97,6 +97,8 @@ export async function POST(req: NextRequest) {
     if (!message) {
       return NextResponse.json({ success: false, error: '祝福內容無效' }, { status: 400 })
     }
+    const tooLong = messageTooLong(message)
+    if (tooLong) return NextResponse.json({ success: false, error: tooLong }, { status: 400 })
 
     const now = new Date().toISOString()
     const id = uuidv4()

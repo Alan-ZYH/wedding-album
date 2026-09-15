@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { adminDb, COLLECTIONS } from '@/lib/firebase-admin'
 import { isAdminAuthenticated } from '@/lib/auth'
-import { sanitizeText } from '@/lib/sanitize'
+import { sanitizeText, messageTooLong } from '@/lib/sanitize'
 import { Message } from '@/types'
 import { admitMessage, unpinMessage, requeueMessage, leaveRotation, PinLimitError, RotationFullError } from '@/lib/message-pool'
 
@@ -34,6 +34,8 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       if (body.message !== undefined) {
         const clean = sanitizeText(body.message)
         if (!clean) return NextResponse.json({ success: false, error: '祝福內容無效' }, { status: 400 })
+        const tooLong = messageTooLong(clean)
+        if (tooLong) return NextResponse.json({ success: false, error: tooLong }, { status: 400 })
         updates.message = clean
       }
       if (body.status === 'deleted') {
@@ -77,6 +79,8 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     if (body.message !== undefined) {
       const clean = sanitizeText(body.message)
       if (!clean) return NextResponse.json({ success: false, error: '祝福內容無效' }, { status: 400 })
+      const tooLong = messageTooLong(clean)
+      if (tooLong) return NextResponse.json({ success: false, error: tooLong }, { status: 400 })
       updates.message = clean
     }
     if (body.status === 'hidden' || body.status === 'deleted') {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { MESSAGE_MAX_CHARS } from '@/lib/sanitize'
 
 interface Props {
   guestId: string
@@ -30,11 +31,15 @@ export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, 
     return () => clearTimeout(t)
   }, [cooldown])
 
+  // Counted as the server counts, so the number shown is the number judged
+  const chars = [...message.trim()].length
+  const tooLong = chars > MESSAGE_MAX_CHARS
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = message.trim()
     if (!trimmed) { setError('請輸入祝福內容'); return }
-    if (trimmed.length > 500) { setError('祝福不可超過 500 字'); return }
+    if ([...trimmed].length > MESSAGE_MAX_CHARS) { setError(`祝福不可超過 ${MESSAGE_MAX_CHARS} 字`); return }
 
     setSubmitting(true)
     setError('')
@@ -81,7 +86,6 @@ export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, 
             value={message}
             onChange={(e) => { setMessage(e.target.value); setError('') }}
             placeholder="寫下您對新人的祝福..."
-            maxLength={500}
             rows={4}
             className="w-full resize-none bg-[#fdf8f0] border border-[#e8d5a3] rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#c9a84c] transition-colors"
           />
@@ -97,7 +101,9 @@ export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, 
                 📌 置頂
               </label>
             ) : <span />}
-            <span className="text-xs text-gray-400">{message.length}/500</span>
+            <span className={`text-xs ${tooLong ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+              {chars}/{MESSAGE_MAX_CHARS}
+            </span>
           </div>
           {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
           {submitted && (
@@ -107,15 +113,16 @@ export default function MessageForm({ guestId, guestName, cooldownSeconds = 30, 
 
         <button
           type="submit"
-          disabled={submitting || !message.trim() || cooldown > 0}
+          disabled={submitting || !message.trim() || cooldown > 0 || tooLong}
           className={`mt-3 w-full py-3 rounded-xl font-medium text-sm transition-all ${
-            submitting || !message.trim() || cooldown > 0
+            submitting || !message.trim() || cooldown > 0 || tooLong
               ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
               : 'bg-[#c9a84c] hover:bg-[#b8953d] text-white'
           }`}
         >
           {submitting ? '送出中...'
             : cooldown > 0 ? `請稍候 ${cooldown} 秒`
+            : tooLong ? `超過 ${chars - MESSAGE_MAX_CHARS} 字，請刪減`
             : '送出祝福 ♡'}
         </button>
       </form>
