@@ -251,7 +251,7 @@ export default function MyUploads({ guestId }: Props) {
                   onClick={() => project(item.id, false)}
                   disabled={projecting === item.id}
                   aria-label="再次投影到大螢幕"
-                  className="bg-[#c9a84c] hover:bg-[#b8953d] text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
+                  className="flex-1 min-w-0 whitespace-nowrap justify-center bg-[#c9a84c] hover:bg-[#b8953d] text-white rounded-lg px-1 py-1 flex items-center gap-0.5 text-[11px] shadow-lg transition-colors"
                 >
                   {projecting === item.id ? '…' : <><span>📺</span><span>投影</span></>}
                 </button>
@@ -260,7 +260,7 @@ export default function MyUploads({ guestId }: Props) {
                 onClick={() => handleDelete(item.id)}
                 disabled={deleting === item.id}
                 aria-label="移除這個檔案"
-                className="bg-black/70 hover:bg-red-600 active:bg-red-600 text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
+                className="flex-1 min-w-0 max-w-[4.5rem] ml-auto whitespace-nowrap justify-center bg-black/70 hover:bg-red-600 active:bg-red-600 text-white rounded-lg px-1 py-1 flex items-center gap-0.5 text-[11px] shadow-lg transition-colors"
               >
                 {deleting === item.id ? '移除中' : <><span>🗑</span><span>移除</span></>}
               </button>
@@ -295,7 +295,7 @@ export default function MyUploads({ guestId }: Props) {
                       onClick={() => project(item.id, true)}
                       disabled={projecting === item.id}
                       aria-label="改為投影到大螢幕"
-                      className="bg-[#c9a84c] hover:bg-[#b8953d] text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
+                      className="flex-1 min-w-0 whitespace-nowrap justify-center bg-[#c9a84c] hover:bg-[#b8953d] text-white rounded-lg px-1 py-1 flex items-center gap-0.5 text-[11px] shadow-lg transition-colors"
                     >
                       {projecting === item.id ? '…' : <><span>📺</span><span>投影</span></>}
                     </button>
@@ -304,7 +304,7 @@ export default function MyUploads({ guestId }: Props) {
                     onClick={() => removeAlbumItem(item.id)}
                     disabled={deleting === item.id}
                     aria-label="從相簿移除"
-                    className="bg-black/70 hover:bg-red-600 active:bg-red-600 text-white rounded-lg px-2 py-1 flex items-center gap-1 text-xs shadow-lg transition-colors"
+                    className="flex-1 min-w-0 max-w-[4.5rem] ml-auto whitespace-nowrap justify-center bg-black/70 hover:bg-red-600 active:bg-red-600 text-white rounded-lg px-1 py-1 flex items-center gap-0.5 text-[11px] shadow-lg transition-colors"
                   >
                     {deleting === item.id ? '移除中' : <><span>🗑</span><span>移除</span></>}
                   </button>
