@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useMessageFeed } from '@/lib/use-message-feed'
 import { Message, MessageDisplayState, DEFAULT_SETTINGS } from '@/types'
 import { useRealNames, withRealName, ADMIN_GUEST_ID } from '@/lib/guest-names'
@@ -51,9 +51,14 @@ export default function MessagesPage() {
   // query cannot exclude them without a composite index — so a page can come
   // back mostly empty, and more so the more the couple has deleted. Keep
   // loading until the tab shows a screenful or there is nothing older.
+  // Capped per tab visit: a load that keeps failing (offline, say) must not
+  // turn into a loop of requests. The button still works by hand.
   const { loadMore, loadingMore } = feed
+  const autoLoads = useRef(0)
+  useEffect(() => { autoLoads.current = 0 }, [stateFilter])
   useEffect(() => {
-    if (moreToLoad && !loadingMore && tabList.length < 30) {
+    if (moreToLoad && !loadingMore && tabList.length < 30 && autoLoads.current < 10) {
+      autoLoads.current += 1
       loadMore(stateFilter as 'all' | 'masked')
     }
   }, [moreToLoad, loadingMore, tabList.length, stateFilter, loadMore])
