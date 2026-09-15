@@ -222,6 +222,9 @@ export interface Guest {
 export interface PlaybackState {
   controllerId: string
   heartbeatAt: string
+  /** The controlling screen said it is in the background, where the browser
+   *  throttles its timers; any visible screen may take over. */
+  controllerHidden?: boolean
   currentMediaId: string
   /** Set when an admin forces a jump, so every screen cuts to it at once. */
   jumpAt?: string

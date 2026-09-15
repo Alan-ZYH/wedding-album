@@ -204,7 +204,12 @@ export default function DisplayClient() {
         const res = await fetch('/api/display', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'claim', clientId: clientIdRef.current }),
+          body: JSON.stringify({
+            action: 'claim',
+            clientId: clientIdRef.current,
+            visible: document.visibilityState === 'visible',
+          }),
+          keepalive: true,
         })
         const data = await res.json()
         if (!cancelled) setIsController(!!data.isController)
@@ -212,7 +217,10 @@ export default function DisplayClient() {
     }
     claim()
     const t = setInterval(claim, 10_000)
-    return () => { cancelled = true; clearInterval(t) }
+    // Say so at once on going to the background, so a screen still in view can
+    // take over, and on coming back, to take over again if nobody is in view
+    document.addEventListener('visibilitychange', claim)
+    return () => { cancelled = true; clearInterval(t); document.removeEventListener('visibilitychange', claim) }
   }, [])
 
   useEffect(() => {

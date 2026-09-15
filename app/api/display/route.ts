@@ -49,18 +49,33 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'claim') {
-      // Take over only when there is no controller or the incumbent went quiet.
+      // Take over when there is no controller, the incumbent went quiet, or the
+      // incumbent is in the background while this screen is in view.
+      //
+      // A background tab still sends its heartbeat, slowly, but the browser
+      // throttles the timer that launches blessings to about once a minute. As
+      // controller it held on while the queue barely moved — measured: 120
+      // blessings queued, none flown in 40 seconds, with a visible screen
+      // flying them fine but not allowed to report them.
+      // Older screens send no `visible`; they count as in view.
+      const hidden = body.visible === false
       const isController = await adminDb.runTransaction(async (tx) => {
         const snap = await tx.get(PLAYBACK_DOC)
         const cur = snap.data() as PlaybackState | undefined
+        if (cur?.controllerId === clientId) {
+          if (!!cur?.controllerHidden !== hidden) {
+            tx.set(PLAYBACK_DOC, { controllerHidden: hidden }, { merge: true })
+          }
+          return true
+        }
         const stale =
           !cur?.controllerId ||
           Date.now() - new Date(cur.heartbeatAt || 0).getTime() > STALE_MS
-        if (cur?.controllerId === clientId) return true
-        if (!stale) return false
+        const takeOverFromBackground = !!cur?.controllerHidden && !hidden
+        if (!stale && !takeOverFromBackground) return false
         tx.set(
           PLAYBACK_DOC,
-          { controllerId: clientId, heartbeatAt: new Date().toISOString() },
+          { controllerId: clientId, heartbeatAt: new Date().toISOString(), controllerHidden: hidden },
           { merge: true }
         )
         return true
