@@ -54,6 +54,13 @@ export default function UploadForm({
   // Cooldown: seconds left before another batch may be uploaded
   const [cooldown, setCooldown] = useState(0)
 
+  // The admin may shorten the wait, or lift it, while a guest is counting down;
+  // never make them sit out longer than the current rule. (Should the server
+  // still disagree, its 429 carries the real remaining time.)
+  useEffect(() => {
+    setCooldown((c) => Math.min(c, cooldownSeconds))
+  }, [cooldownSeconds])
+
   // Tick the cooldown down to zero
   useEffect(() => {
     if (cooldown <= 0) return

@@ -102,6 +102,9 @@ export interface Settings {
   danmakuStyle: DanmakuStyle
   carouselSize: number      // max photos in the carousel (pinned + playing)
   messageCarouselSize: number // max blessings in the danmaku rotation (pinned + playing)
+  uploadThrottleEnabled: boolean // guest photo cooldown on/off (blocking always applies)
+  uploadBurst: number            // photos a guest may send per batch / per window
+  uploadCooldownSec: number      // seconds a guest waits after a batch
   allowInsert: boolean      // when false, new uploads stay in 'pending'
   showQrCode: boolean       // overlay the guest QR on the projection screen
   qrPosition: QrPosition
@@ -127,6 +130,9 @@ export const DEFAULT_SETTINGS: Settings = {
   danmakuStyle: 'scroll',
   carouselSize: 50,
   messageCarouselSize: 20,
+  uploadThrottleEnabled: true,
+  uploadBurst: 3,
+  uploadCooldownSec: 30,
   allowInsert: true,
   showQrCode: true,
   qrPosition: 'bottom-right',

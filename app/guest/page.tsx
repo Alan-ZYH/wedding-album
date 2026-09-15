@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { DEFAULT_SETTINGS } from '@/types'
+import { photoLimits, UNTHROTTLED_MAX_FILES, type PhotoLimits } from '@/lib/upload-limits'
 import GuestLogin from '@/components/guest/GuestLogin'
 import UploadForm from '@/components/guest/UploadForm'
 import MyUploads from '@/components/guest/MyUploads'
@@ -26,6 +27,7 @@ export default function GuestPage() {
   const [activeTab, setActiveTab] = useState<'upload' | 'message' | 'myUploads'>('upload')
   const [mounted, setMounted] = useState(false)
   const [albumName, setAlbumName] = useState(DEFAULT_SETTINGS.albumName)
+  const [limits, setLimits] = useState<PhotoLimits>(photoLimits(DEFAULT_SETTINGS))
   const [editingName, setEditingName] = useState(false)
 
   useEffect(() => {
@@ -55,6 +57,9 @@ export default function GuestPage() {
         if (snap.exists()) {
           const data = snap.data()
           if (data?.albumName) setAlbumName(data.albumName)
+          // The admin can change the upload limits mid-reception; the picker
+          // and the hint follow at once. The server enforces the same values.
+          setLimits(photoLimits(data))
         }
       },
       () => {} // ignore errors, keep default
@@ -161,6 +166,8 @@ export default function GuestPage() {
           <UploadForm
             guestId={guest.guestId}
             guestName={guest.guestName}
+            maxFiles={limits.enabled ? limits.burst : UNTHROTTLED_MAX_FILES}
+            cooldownSeconds={limits.enabled ? limits.windowSec : 0}
             onViewUploads={() => setActiveTab('myUploads')}
           />
         )}

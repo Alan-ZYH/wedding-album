@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb, COLLECTIONS } from './firebase-admin'
 import { Guest } from '@/types'
+import type { PhotoLimits } from './upload-limits'
 
 /**
  * Guest gating: blocking + upload cooldown.
@@ -13,6 +14,7 @@ import { Guest } from '@/types'
  * upload/complete, never from init), so failed uploads are not penalised.
  */
 export const COOLDOWN = {
+  // Photo defaults only — the live values come from 設定 via photoLimits()
   photo: { windowSec: 30, burst: 3 },
   message: { windowSec: 30, burst: 1 },
 } as const
@@ -32,14 +34,18 @@ export async function getGuest(guestId: string): Promise<Guest | null> {
 /** Check whether a guest may perform an action right now. Does not mutate. */
 export async function checkGuestGate(
   guestId: string,
-  action: GuestAction
+  action: GuestAction,
+  limits?: PhotoLimits
 ): Promise<GuestGate> {
   const guest = await getGuest(guestId)
   if (!guest) return { ok: true } // first time — nothing to block or throttle
 
+  // Blocking holds whatever the limits say; turning limits off only lifts the
+  // cooldown
   if (guest.blocked) return { ok: false, reason: 'blocked' }
+  if (action === 'photo' && limits && (!limits.enabled || limits.windowSec === 0)) return { ok: true }
 
-  const { windowSec, burst } = COOLDOWN[action]
+  const { windowSec, burst } = action === 'photo' && limits ? limits : COOLDOWN[action]
   const startedAt = action === 'photo' ? guest.lastPhotoAt : guest.lastMessageAt
   const used = (action === 'photo' ? guest.photoBurst : guest.messageBurst) ?? 0
   if (!startedAt) return { ok: true }
@@ -58,11 +64,12 @@ export async function checkGuestGate(
 export async function recordGuestAction(
   guestId: string,
   guestName: string,
-  action: GuestAction
+  action: GuestAction,
+  limits?: PhotoLimits
 ): Promise<void> {
   const ref = adminDb.collection(COLLECTIONS.GUESTS).doc(guestId)
   const now = new Date().toISOString()
-  const { windowSec } = COOLDOWN[action]
+  const { windowSec } = action === 'photo' && limits ? limits : COOLDOWN[action]
 
   const existing = await getGuest(guestId)
   const startedAt = action === 'photo' ? existing?.lastPhotoAt : existing?.lastMessageAt

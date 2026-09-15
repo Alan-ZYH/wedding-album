@@ -85,6 +85,37 @@ export default function SettingsPage() {
           </div>
         </Section>
 
+        {/* Guest upload limits */}
+        <Section title="賓客上傳限制" icon="⏱️">
+          <ToggleField
+            label="啟用上傳限流"
+            description="關閉後賓客可連續上傳，一次最多 50 張。被封鎖的賓客仍然無法上傳"
+            value={settings.uploadThrottleEnabled !== false}
+            onChange={(v) => update('uploadThrottleEnabled', v)}
+          />
+          <div className={settings.uploadThrottleEnabled === false ? 'opacity-40 pointer-events-none space-y-4' : 'space-y-4'}>
+            <SliderField
+              label="每次最多張數"
+              min={1} max={20} step={1}
+              value={settings.uploadBurst ?? 3}
+              onChange={(v) => update('uploadBurst', v)}
+              display={`${settings.uploadBurst ?? 3} 張`}
+            />
+            <SliderField
+              label="上傳後等待秒數"
+              min={0} max={180} step={5}
+              value={settings.uploadCooldownSec ?? 30}
+              onChange={(v) => update('uploadCooldownSec', v)}
+              display={(settings.uploadCooldownSec ?? 30) === 0 ? '不用等' : `${settings.uploadCooldownSec ?? 30} 秒`}
+            />
+            <p className="text-xs text-gray-400 -mt-2">
+              賓客一次選 {settings.uploadBurst ?? 3} 張傳完後，
+              {(settings.uploadCooldownSec ?? 30) === 0 ? '可以馬上再傳下一批' : `要等 ${settings.uploadCooldownSec ?? 30} 秒才能再傳`}。
+              上傳失敗不計入。儲存後立即生效，賓客端不用重新整理。
+            </p>
+          </div>
+        </Section>
+
         {/* Photo carousel: playback timing and the pool itself, one place */}
         <Section title="照片輪播池設定" icon="🎠">
           <SliderField

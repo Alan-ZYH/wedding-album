@@ -4,6 +4,7 @@ import { findFileByName, setDriveFilePublic, buildThumbnailUrl } from '@/lib/goo
 import { getSettings } from '@/lib/settings'
 import { isAdminAuthenticated } from '@/lib/auth'
 import { recordGuestAction } from '@/lib/guests'
+import { photoLimits } from '@/lib/upload-limits'
 import { Media } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
 
     // Only a successful upload advances the cooldown window ("失敗不罰")
     if (!admin) {
-      await recordGuestAction(guestId, guestName, 'photo')
+      await recordGuestAction(guestId, guestName, 'photo', photoLimits(settings))
     }
 
     return NextResponse.json({ success: true, mediaId })

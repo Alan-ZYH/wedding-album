@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getSettings } from '@/lib/settings'
+import { photoLimits, initRequestsPerMinute } from '@/lib/upload-limits'
 import { v4 as uuidv4 } from 'uuid'
 import { createResumableUploadSession } from '@/lib/google-drive'
 import { validateFile, sanitizeName } from '@/lib/sanitize'
@@ -35,15 +37,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少賓客資訊' }, { status: 400 })
     }
 
+    // The admin's upload limits, read per request so a change in 設定 applies
+    // to the very next photo
+    const limits = photoLimits(await getSettings())
+
     // Rate limit keyed by ip+guestId so guests on the same venue WiFi
-    // don't consume each other's quota
-    if (!checkRateLimit(req, parseInt(process.env.RATE_LIMIT_MAX || '10'), guestId)) {
+    // don't consume each other's quota. Derived from the limits so it can
+    // never be stricter than what 設定 allows.
+    if (!checkRateLimit(req, initRequestsPerMinute(limits), guestId)) {
       return NextResponse.json({ success: false, error: '上傳過於頻繁，請稍後再試' }, { status: 429 })
     }
 
     // Block list + 30s cooldown (admins bypass both)
     if (!admin) {
-      const gate = await checkGuestGate(guestId, 'photo')
+      const gate = await checkGuestGate(guestId, 'photo', limits)
       if (!gate.ok) {
         return NextResponse.json(
           {
