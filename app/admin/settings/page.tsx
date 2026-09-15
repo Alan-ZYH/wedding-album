@@ -85,8 +85,21 @@ export default function SettingsPage() {
           </div>
         </Section>
 
-        {/* Guest upload limits */}
-        <Section title="賓客上傳限制" icon="⏱️">
+        {/* Guest uploads: what is open, and how fast */}
+        <Section title="賓客上傳設定" icon="⏱️">
+          <ToggleField
+            label="開放上傳照片"
+            description="關閉後賓客端顯示「目前尚未開放，期待幸福降臨」。新人上傳不受影響"
+            value={settings.guestPhotosOpen !== false}
+            onChange={(v) => update('guestPhotosOpen', v)}
+          />
+          <ToggleField
+            label="開放送上祝福"
+            description="關閉後賓客端顯示「目前尚未開放，期待幸福降臨」。新人上傳不受影響"
+            value={settings.guestMessagesOpen !== false}
+            onChange={(v) => update('guestMessagesOpen', v)}
+          />
+          <div className="border-t border-gray-100" />
           <ToggleField
             label="啟用上傳限流"
             description="關閉後賓客可連續上傳，一次最多 50 張。被封鎖的賓客仍然無法上傳"

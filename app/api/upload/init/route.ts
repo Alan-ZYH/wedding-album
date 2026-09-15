@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSettings } from '@/lib/settings'
 import { photoLimits, initRequestsPerMinute } from '@/lib/upload-limits'
+import { photosOpen, CLOSED_MESSAGE } from '@/lib/guest-access'
 import { v4 as uuidv4 } from 'uuid'
 import { createResumableUploadSession } from '@/lib/google-drive'
 import { validateFile, sanitizeName } from '@/lib/sanitize'
@@ -37,9 +38,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少賓客資訊' }, { status: 400 })
     }
 
-    // The admin's upload limits, read per request so a change in 設定 applies
-    // to the very next photo
-    const limits = photoLimits(await getSettings())
+    // The admin's switches and limits, read per request so a change in 設定
+    // applies to the very next photo
+    const settings = await getSettings()
+    const limits = photoLimits(settings)
+
+    // Closed to guests: the page shows the same message, but a page loaded
+    // before the switch — or a direct request — is refused here all the same
+    if (!admin && !photosOpen(settings)) {
+      return NextResponse.json({ success: false, error: CLOSED_MESSAGE, reason: 'closed' }, { status: 403 })
+    }
 
     // Rate limit keyed by ip+guestId so guests on the same venue WiFi
     // don't consume each other's quota. Derived from the limits so it can

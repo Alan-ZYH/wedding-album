@@ -102,6 +102,8 @@ export interface Settings {
   danmakuStyle: DanmakuStyle
   carouselSize: number      // max photos in the carousel (pinned + playing)
   messageCarouselSize: number // max blessings in the danmaku rotation (pinned + playing)
+  guestPhotosOpen: boolean       // guests may upload photos (the couple always may)
+  guestMessagesOpen: boolean     // guests may send blessings (the couple always may)
   uploadThrottleEnabled: boolean // guest photo cooldown on/off (blocking always applies)
   uploadBurst: number            // photos a guest may send per batch / per window
   uploadCooldownSec: number      // seconds a guest waits after a batch
@@ -130,6 +132,8 @@ export const DEFAULT_SETTINGS: Settings = {
   danmakuStyle: 'scroll',
   carouselSize: 50,
   messageCarouselSize: 20,
+  guestPhotosOpen: true,
+  guestMessagesOpen: true,
   uploadThrottleEnabled: true,
   uploadBurst: 3,
   uploadCooldownSec: 30,

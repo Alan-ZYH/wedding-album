@@ -135,7 +135,7 @@ export default function UploadForm({
           // Server is the source of truth for the cooldown / block state
           if (typeof initData.remaining === 'number') setCooldown(initData.remaining)
           errs.push(initData.error || `${file.name}：初始化失敗`)
-          if (initData.reason === 'blocked' || initData.reason === 'cooldown') break
+          if (initData.reason === 'blocked' || initData.reason === 'cooldown' || initData.reason === 'closed') break
           continue
         }
         const { uploadUrl, mediaId, fileName } = initData

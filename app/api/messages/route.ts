@@ -8,6 +8,8 @@ import { isBlessingColor } from '@/lib/blessing-colors'
 import { sanitizeText, sanitizeName } from '@/lib/sanitize'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { Message } from '@/types'
+import { getSettings } from '@/lib/settings'
+import { messagesOpen, CLOSED_MESSAGE } from '@/lib/guest-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +69,10 @@ export async function POST(req: NextRequest) {
 
     if (!messageRaw?.trim()) {
       return NextResponse.json({ success: false, error: '祝福內容不可為空' }, { status: 400 })
+    }
+
+    if (!isAdmin && !messagesOpen(await getSettings())) {
+      return NextResponse.json({ success: false, error: CLOSED_MESSAGE, reason: 'closed' }, { status: 403 })
     }
 
     // Block list + 30s cooldown, tracked separately from photo uploads
