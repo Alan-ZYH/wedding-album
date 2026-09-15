@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: gateErrorMessage(gate),
+            error: gateErrorMessage(gate, 'upload'),
             reason: gate.reason,
             remaining: gate.reason === 'cooldown' ? gate.remaining : undefined,
           },

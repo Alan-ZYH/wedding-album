@@ -110,8 +110,23 @@ export async function recordGuestAction(
 }
 
 /** Human-readable rejection for the guest-facing API responses. */
-export function gateErrorMessage(gate: Exclude<GuestGate, { ok: true }>): string {
-  return gate.reason === 'blocked'
-    ? '目前暫停上傳，請洽工作人員'
-    : `請稍候 ${gate.remaining} 秒後再上傳`
+/**
+ * What the guest was trying to do, so the refusal names it. This once said
+ * 上傳 for everything, and a guest refused a blessing or a 投影 was told to wait
+ * before uploading — something they had not tried to do.
+ */
+export type GateAction = 'upload' | 'message' | 'project'
+
+export function gateErrorMessage(gate: Exclude<GuestGate, { ok: true }>, action: GateAction): string {
+  if (gate.reason === 'blocked') {
+    return { upload: '目前暫停上傳，請洽工作人員', message: '目前暫停送出祝福，請洽工作人員', project: '目前暫停投影，請洽工作人員' }[action]
+  }
+  const s = gate.remaining
+  return {
+    upload: `請稍候 ${s} 秒後再上傳`,
+    message: `請稍候 ${s} 秒後再送出祝福`,
+    // 投影 spends the same allowance as uploading, so the wait usually follows
+    // an upload; saying so tells the guest why the button is refusing
+    project: `剛分享過照片，請稍候 ${s} 秒再投影`,
+  }[action]
 }

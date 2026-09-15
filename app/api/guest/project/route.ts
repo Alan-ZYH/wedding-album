@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     const gate = await checkGuestGate(guestId, 'photo', limits)
     if (!gate.ok) {
       return NextResponse.json(
-        { success: false, error: gateErrorMessage(gate), reason: gate.reason, remaining: gate.reason === 'cooldown' ? gate.remaining : undefined },
+        { success: false, error: gateErrorMessage(gate, 'project'), reason: gate.reason, remaining: gate.reason === 'cooldown' ? gate.remaining : undefined },
         { status: gate.reason === 'blocked' ? 403 : 429 }
       )
     }
