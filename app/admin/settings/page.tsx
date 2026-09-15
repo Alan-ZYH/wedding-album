@@ -228,10 +228,10 @@ export default function SettingsPage() {
           />
           <SliderField
             label="彈幕密度"
-            min={1} max={5} step={1}
+            min={1} max={10} step={1}
             value={settings.danmakuDensity}
             onChange={(v) => update('danmakuDensity', v)}
-            display={['很疏', '疏', '適中', '密', '很密'][settings.danmakuDensity - 1]}
+            display={`${settings.danmakuDensity}・${['很疏', '疏', '適中', '密', '密', '很密', '很密', '極密', '極密', '極密'][settings.danmakuDensity - 1]}`}
           />
           <SliderField
             label="彈幕字體大小"

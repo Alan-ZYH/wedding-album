@@ -11,7 +11,7 @@ interface Props {
   /** Called as a queued blessing takes off; the controlling screen reports it */
   onFlown?: (id: string) => void
   speed: number      // 1-5
-  density: number    // 1-5
+  density: number    // 1-10
   fontSize: number   // px
   danmakuStyle: DanmakuStyle
 }
@@ -53,8 +53,13 @@ export default function DanmakuLayer({ messages, queue, onFlown, speed, density,
   // When each queued blessing last took off from this screen
   const flownAtRef = useRef<Map<string, number>>(new Map())
   const channelsRef = useRef<number[]>([]) // track occupied y positions
+  // When each lane last launched, so a full screen reuses the lane whose last
+  // blessing has travelled furthest
+  const laneLaunchRef = useRef<number[]>([])
   const activeCountRef = useRef(0) // mirrors active.length for use inside timers
-  const numChannels = 8
+  // Past 5 blessings launch faster than eight lanes empty; more, narrower lanes
+  // keep them from landing on top of each other
+  const numChannels = density > 5 ? 12 : 8
 
   useEffect(() => {
     activeCountRef.current = active.length
@@ -85,7 +90,9 @@ export default function DanmakuLayer({ messages, queue, onFlown, speed, density,
   useEffect(() => {
     if (!hasMessages) return
 
-    // density: 1=sparse, 5=dense → interval in ms
+    // density: 1=sparse … 10=densest → one launch every 8s … 0.8s. The queue
+    // drains at this pace, so a burst of blessings after a toast reaches the
+    // screen sooner at higher settings (3 flies about 22 a minute, 10 about 75)
     // speed: 1=slow(12s), 5=fast(5s)
     const intervalMs = Math.round(8000 / density)
     const baseDuration = Math.round(14000 - speed * 1800) // 5s-12s
@@ -123,10 +130,20 @@ export default function DanmakuLayer({ messages, queue, onFlown, speed, density,
       const usedChannels = channelsRef.current
       let channel = Math.floor(Math.random() * numChannels)
       // Try to find unused channel
-      for (let attempts = 0; attempts < numChannels; attempts++) {
+      let attempts = 0
+      for (; attempts < numChannels; attempts++) {
         if (!usedChannels.includes(channel)) break
         channel = (channel + 1) % numChannels
       }
+      if (attempts === numChannels) {
+        // Every lane busy: the one launched longest ago has the most room
+        const launched = laneLaunchRef.current
+        channel = 0
+        for (let c = 1; c < numChannels; c++) {
+          if ((launched[c] ?? 0) < (launched[channel] ?? 0)) channel = c
+        }
+      }
+      laneLaunchRef.current[channel] = now
 
       const topPct = 8 + (channel / numChannels) * 82 // 8% to 90%
       const duration = baseDuration + Math.random() * 3000 // ±3s variation
@@ -161,7 +178,7 @@ export default function DanmakuLayer({ messages, queue, onFlown, speed, density,
     setTimeout(fire, 500)
 
     return () => clearInterval(interval)
-  }, [hasMessages, speed, density, danmakuStyle])
+  }, [hasMessages, speed, density, danmakuStyle, numChannels])
 
   return (
     <div className="danmaku-container pointer-events-none">

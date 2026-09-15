@@ -112,7 +112,7 @@ export interface Settings {
   albumName: string         // event/album title shown on guest page
   slideInterval: number     // seconds per slide
   danmakuSpeed: number      // 1-5 scale
-  danmakuDensity: number    // 1-5 scale
+  danmakuDensity: number    // 1-10 scale
   showGuestName: boolean
   showDanmaku: boolean
   playVideos: boolean
