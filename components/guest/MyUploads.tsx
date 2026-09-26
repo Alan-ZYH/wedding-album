@@ -164,7 +164,10 @@ export default function MyUploads({ guestId }: Props) {
       const res = await fetch(`/api/media/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId, status: 'hidden' }),
+        // Deleted, as a guest's own blessing is: it lands in 刪除 in 媒體管理,
+        // where the couple can restore it. It used to be sent as hidden, which
+        // left it sitting among the photos still in play, badged 已隱藏.
+        body: JSON.stringify({ guestId, status: 'deleted' }),
       })
       if (!(await res.json()).success) {
         alert('移除失敗，請稍後再試')

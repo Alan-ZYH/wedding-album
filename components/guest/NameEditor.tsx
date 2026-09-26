@@ -23,8 +23,9 @@ export default function NameEditor({ realName, guestName, onSave, onClose }: Pro
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const r = real.trim()
-    const d = display.trim() || r
+    const d = display.trim()
     if (!r) { setError('請輸入您的本名'); return }
+    if (!d) { setError('請輸入投影顯示名稱'); return }
     const problem = checkNames(r, d)
     if (problem) { setError(problem); return }
     onSave(r, d)

@@ -18,11 +18,17 @@ export default function GuestLogin({ onLogin, initial }: Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const real = realName.trim()
-    // Most guests are happy to be shown by their own name; asking twice and
-    // demanding an answer both times just adds a step before the album.
-    const display = guestName.trim() || real
+    // Both are asked for: the couple match the photo to a person by the real
+    // name, and the screen shows the other one. A blank one used to copy the
+    // real name onto the screen, which is not what a guest who left it blank
+    // was choosing.
+    const display = guestName.trim()
     if (!real) {
       setError('請輸入您的本名')
+      return
+    }
+    if (!display) {
+      setError('請輸入投影顯示名稱')
       return
     }
     const problem = checkNames(real, display)
@@ -72,7 +78,7 @@ export default function GuestLogin({ onLogin, initial }: Props) {
             <label className="block text-sm font-medium text-[#7a5c2e] mb-1">
               投影顯示名稱
             </label>
-            <p className="text-xs text-gray-400 mb-2">會顯示在大螢幕上，留空就用本名</p>
+            <p className="text-xs text-gray-400 mb-2">會顯示在大螢幕上，可以用小名或暱稱</p>
             <input
               type="text"
               value={guestName}
